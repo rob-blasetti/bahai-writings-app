@@ -66,6 +66,7 @@ ios/Pods/
 **/fastlane/Preview.html
 **/fastlane/screenshots
 **/fastlane/test_output
+**/fastlane/*.p8
 
 # Environment files
 .env

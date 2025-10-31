@@ -1,0 +1,113 @@
+def apply_env_file(path, overwrite: false)
+  return unless path && File.exist?(path)
+
+  File.foreach(path) do |line|
+    stripped = line.strip
+    next if stripped.empty? || stripped.start_with?('#')
+
+    key_part, value = stripped.split('=', 2)
+    next unless key_part && value
+
+    key = key_part.sub(/\Aexport\s+/i, '').strip
+    processed_value = value.strip.gsub(/\A['"]|['"]\Z/, '')
+
+    next if !overwrite && ENV.key?(key)
+
+    ENV[key] = processed_value
+  end
+end
+
+def mask_env_value(value, prefix: 4, suffix: 4)
+  return '<missing>' if value.nil? || value.strip.empty?
+
+  trimmed = value.strip
+  return "<set:#{trimmed.length}chars>" if trimmed.length <= prefix + suffix
+
+  head = trimmed[0, prefix]
+  tail = trimmed[-suffix, suffix]
+  "#{head}...#{tail} (len=#{trimmed.length})"
+end
+
+def log_release_credentials
+  UI.message "🔐 FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD: #{mask_env_value(ENV['FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD'])}"
+  UI.message "🔐 ASC_KEY_ID: #{mask_env_value(ENV['ASC_KEY_ID'], suffix: 0)}"
+  UI.message "🔐 ASC_ISSUER_ID: #{mask_env_value(ENV['ASC_ISSUER_ID'])}"
+  UI.message "🔐 ASC_KEY_FILE: #{ENV['ASC_KEY_FILE']&.strip || '<unset>'}"
+end
+
+project_root = File.expand_path('../..', __dir__)
+default_env_path = File.join(project_root, '.env')
+apply_env_file(default_env_path)
+
+selected_envfile = ENV['FASTLANE_ENVFILE']&.strip
+selected_envfile = nil if selected_envfile&.empty?
+selected_envfile ||= ENV['ENVFILE']&.strip
+selected_envfile = nil if selected_envfile&.empty?
+
+active_env_path = default_env_path
+
+if selected_envfile
+  resolved_env_path =
+    if selected_envfile.start_with?('/')
+      selected_envfile
+    else
+      File.join(project_root, selected_envfile)
+    end
+  apply_env_file(resolved_env_path, overwrite: true)
+  ENV['ENVFILE'] = selected_envfile
+  active_env_path = resolved_env_path
+else
+  ENV['ENVFILE'] ||= '.env'
+end
+
+UI.message "📄 Fastlane env file: #{ENV['ENVFILE']} (#{active_env_path})"
+log_release_credentials
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    UI.message "🚀 Preparing TestFlight build for com.liquidspirit.kali"
+    log_release_credentials
+
+    sh "mkdir -p ios"
+    sh "touch ios/Config.xcconfig"
+
+    match(
+      type: "appstore",
+      git_url: "git@github.com:rob-blasetti/signing-repo.git",
+      app_identifier: "com.liquidspirit.kali",
+      readonly: true
+    )
+
+    increment_build_number(
+      xcodeproj: "bahai_writings_app.xcodeproj"
+    )
+
+    build_app(
+      workspace: "bahai_writings_app.xcworkspace",
+      scheme: "bahai_writings_app",
+      export_method: "app-store"
+    )
+
+    upload_to_testflight(
+      api_key: app_store_connect_api_key(
+        key_id: ENV['ASC_KEY_ID'],
+        issuer_id: ENV['ASC_ISSUER_ID'],
+        key_filepath: ENV['ASC_KEY_FILE']
+      )
+    )
+  end
+
+  desc "Dry run of beta lane without side effects"
+  lane :beta_dry do
+    UI.message "[DRY RUN] 🚀 Preparing TestFlight build for com.liquidspirit.kali"
+    log_release_credentials
+    UI.message "[DRY RUN] match(appstore) using signing repo (readonly) for com.liquidspirit.kali"
+    UI.message "[DRY RUN] increment_build_number on bahai_writings_app.xcodeproj"
+    UI.message "[DRY RUN] build_app workspace: bahai_writings_app.xcworkspace, scheme: bahai_writings_app"
+    UI.message "[DRY RUN] upload_to_testflight via ASC API key"
+    UI.success "[DRY RUN] Completed beta steps successfully"
+  end
+end

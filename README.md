@@ -58,4 +58,15 @@ Any time you add, remove, or modify a writing, rerun the script so the manifest 
 - iOS build failures related to pods: `bundle install && bundle exec pod install --project-directory=ios`.
 - Android build issues: ensure the emulator is running and that `ANDROID_HOME` points to your SDK directory.
 
+## TestFlight Distribution
+
+Fastlane lives in `ios/fastlane/` and mirrors the `liquid_spirit_memorise` workflow, targeting the bundle ID `com.liquidspirit.kali` (SKU `com.liquidspirit.kali` in App Store Connect).
+
+1. Install Ruby dependencies from the `ios` folder: `cd ios && bundle install`.
+2. Provide credentials in the project root `.env` (git-ignored) or another env file referenced via `FASTLANE_ENVFILE`. Required keys: `FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD`, `ASC_KEY_ID`, `ASC_ISSUER_ID`, and `ASC_KEY_FILE`.
+3. (Optional) duplicate your `.env` to variants like `.env.production` and launch Fastlane with `FASTLANE_ENVFILE=.env.production`.
+4. From the `ios` directory run `bundle exec fastlane ios beta` to build and upload, or `bundle exec fastlane ios beta_dry` for a rehearsal.
+
+The lane automatically pulls signing assets with `match`, bumps the build number, compiles `bahai_writings_app.xcworkspace`, and uploads through your App Store Connect API key.
+
 For deeper debugging tips, consult the official [React Native troubleshooting guide](https://reactnative.dev/docs/troubleshooting).
