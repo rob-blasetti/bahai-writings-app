@@ -1,97 +1,61 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Baha'i Writings App
 
-# Getting Started
+A React Native application for reading and searching from a curated collection of Baha'i writings. The app parses source XHTML files, generates an in-app JSON library, and serves the texts through a mobile-friendly interface.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+## Features
 
-## Step 1: Start Metro
+- Parses XHTML source documents into a searchable JSON catalog.
+- Supports both Android and iOS builds with the standard React Native toolchain.
+- Ships with scripts for updating the writings library and bundling assets.
+- Written in modern JavaScript with Jest tests and Metro bundling.
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## Requirements
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+- Node.js 18+ and npm (or Yarn) installed.
+- iOS builds: Xcode with Command Line Tools, Ruby, and CocoaPods.
+- Android builds: Android Studio, SDK platform tools, and an emulator or device.
 
-```sh
-# Using npm
-npm start
+Complete the official React Native [environment setup](https://reactnative.dev/docs/environment-setup) before continuing.
 
-# OR using Yarn
-yarn start
-```
-
-## Step 2: Build and run your app
-
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
-
-### Android
+## Getting Started
 
 ```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+npm install
+npm start           # starts Metro in watch mode
+npm run ios         # runs the iOS app (Metro must be running)
+npm run android     # runs the Android app (Metro must be running)
 ```
 
-### iOS
+Start Metro in one terminal, then launch the desired platform from another terminal or directly inside Xcode/Android Studio.
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## Updating the Writings Library
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+1. Drop XHTML source files into `assets/writings/`.
+2. Install dependencies for the parser if you have not already: `npm install`.
+3. Run `npm run process:writings` to regenerate `assets/generated/writings.json`. This script scans every XHTML file, extracts metadata and body text, and writes the consolidated JSON payload consumed by the app.
+4. Restart the app or reload the simulator to see the new content.
 
-```sh
-bundle install
-```
+Any time you add, remove, or modify a writing, rerun the script so the manifest stays consistent.
 
-Then, and every time you update your native dependencies, run:
+## Project Structure
 
-```sh
-bundle exec pod install
-```
+- `App.jsx` – main application entry point and navigation.
+- `assets/writings/` – raw XHTML source files to ingest.
+- `assets/generated/writings.json` – auto-generated library used at runtime.
+- `scripts/` – helper utilities, including the writings processing script.
+- `__tests__/` – Jest test suites.
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## Useful Scripts
 
-```sh
-# Using npm
-npm run ios
+- `npm test` – run the Jest test suite.
+- `npm run lint` – lint the JavaScript codebase (if configured).
+- `npm run process:writings` – regenerate the writings JSON library.
+- `npm run bundle:ios` / `npm run bundle:android` – generate release bundles (when defined).
 
-# OR using Yarn
-yarn ios
-```
+## Troubleshooting
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+- Metro stuck? Stop running instances and clear caches with `npx react-native start --reset-cache`.
+- iOS build failures related to pods: `bundle install && bundle exec pod install --project-directory=ios`.
+- Android build issues: ensure the emulator is running and that `ANDROID_HOME` points to your SDK directory.
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
-
-## Step 3: Modify your app
-
-Now that you have successfully run the app, let's make changes!
-
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
-
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
-
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
-
-## Congratulations! :tada:
-
-You've successfully run and modified your React Native App. :partying_face:
-
-### Now what?
-
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+For deeper debugging tips, consult the official [React Native troubleshooting guide](https://reactnative.dev/docs/troubleshooting).
