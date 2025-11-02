@@ -18,11 +18,17 @@ import {
 import writingsManifest from './assets/generated/writings.json';
 
 function cleanBlockText(block) {
-  return block
+  const normalized = block
     .replace(/\u00a0/g, ' ')
     .replace(/[ \t]{2,}/g, ' ')
     .replace(/\s*\n\s*/g, '\n')
     .trim();
+
+  if (/^\d+\.\s*$/.test(normalized)) {
+    return '';
+  }
+
+  return normalized;
 }
 
 function normalizeSectionBlocks(section, fallbackSectionId, fallbackText = '') {
