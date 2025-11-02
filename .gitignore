@@ -61,7 +61,10 @@ ios/Pods/
 .vscode/
 *.iml
 
-# fastlane artifacts
+# fastlane config & artifacts
+ios/Gemfile
+ios/Gemfile.lock
+ios/fastlane/
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots
