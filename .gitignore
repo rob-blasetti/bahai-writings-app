@@ -65,6 +65,7 @@ ios/Pods/
 ios/Gemfile
 ios/Gemfile.lock
 ios/fastlane/
+ios/vendor/
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots
