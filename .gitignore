@@ -70,6 +70,7 @@ ios/fastlane/
 **/fastlane/screenshots
 **/fastlane/test_output
 **/fastlane/*.p8
+appstoreconnect/
 
 # Environment files
 .env
