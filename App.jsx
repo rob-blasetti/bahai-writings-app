@@ -244,6 +244,8 @@ function AppContent() {
     [shareThemeId, shareThemes],
   );
   const [shareContext, setShareContext] = useState(null);
+  const [programPassages, setProgramPassages] = useState([]);
+  const [programReturnScreen, setProgramReturnScreen] = useState(null);
   const [sectionBlockIndex, setSectionBlockIndex] = useState(0);
   const sectionPagerRef = useRef(null);
   const sectionViewabilityConfig = useRef({
@@ -298,6 +300,35 @@ function AppContent() {
       }),
     [writings],
   );
+  const programCount = programPassages.length;
+  const programButtonLabel = useMemo(() => {
+    if (programCount === 0) {
+      return 'Devotional program';
+    }
+    return `Devotional program (${programCount})`;
+  }, [programCount]);
+  const hasProgramPassages = programCount > 0;
+  const programBackButtonLabel = useMemo(() => {
+    if (programReturnScreen === 'share') {
+      return 'Back to sharing';
+    }
+    if (programReturnScreen === 'section') {
+      return 'Back to reading';
+    }
+    if (programReturnScreen === 'passage') {
+      return 'Back to passage';
+    }
+    if (programReturnScreen === 'writing') {
+      return 'Back to sections';
+    }
+    if (programReturnScreen === 'settings') {
+      return 'Back to settings';
+    }
+    if (programReturnScreen === 'home') {
+      return 'Back to home';
+    }
+    return 'Back';
+  }, [programReturnScreen]);
 
   useEffect(() => {
     if (!selectedWriting) {
@@ -389,6 +420,97 @@ function AppContent() {
     }
   };
 
+  const handleAddToProgram = ({
+    block,
+    writingId,
+    writingTitle,
+    sectionId,
+    sectionTitle,
+  }) => {
+    if (!block?.text) {
+      return;
+    }
+    const timestamp = Date.now();
+    const normalizedWritingId = writingId ?? null;
+    const normalizedSectionId = sectionId ?? null;
+    const blockId = block.id ?? `block-${timestamp}`;
+    const safeBlock = {
+      id: blockId,
+      text: block.text,
+      type: block.type ?? 'paragraph',
+      sourceId: block.sourceId ?? null,
+    };
+    const programItem = {
+      id: `program-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+      block: safeBlock,
+      writingId: normalizedWritingId,
+      writingTitle: writingTitle ?? 'Unknown writing',
+      sectionId: normalizedSectionId,
+      sectionTitle: sectionTitle ?? null,
+    };
+
+    setProgramPassages(previous => {
+      if (
+        previous.some(
+          item =>
+            item.block.id === blockId &&
+            item.writingId === normalizedWritingId &&
+            item.sectionId === normalizedSectionId,
+        )
+      ) {
+        return previous;
+      }
+      return [...previous, programItem];
+    });
+  };
+
+  const handleOpenProgram = () => {
+    if (currentScreen === 'program') {
+      return;
+    }
+    setProgramReturnScreen(currentScreen);
+    setCurrentScreen('program');
+  };
+
+  const handleCloseProgram = () => {
+    const nextScreen = programReturnScreen ?? 'home';
+    setProgramReturnScreen(null);
+    setCurrentScreen(nextScreen);
+  };
+
+  const handleRemoveFromProgram = itemId => {
+    setProgramPassages(previous =>
+      previous.filter(item => item.id !== itemId),
+    );
+  };
+
+  const handleClearProgram = () => {
+    setProgramPassages([]);
+  };
+
+  const handleShareProgram = async () => {
+    if (programPassages.length === 0) {
+      return;
+    }
+
+    const header = 'Devotional Program';
+    const body = programPassages
+      .map((item, index) => {
+        const sourceLine = item.sectionTitle
+          ? `${item.writingTitle} — ${item.sectionTitle}`
+          : item.writingTitle ?? 'Selected passage';
+        return `${index + 1}. ${sourceLine}\n${item.block.text}`;
+      })
+      .join('\n\n');
+    const message = `${header}\n\n${body}`;
+
+    try {
+      await Share.share({ message });
+    } catch (error) {
+      console.warn('Unable to share devotional program', error);
+    }
+  };
+
   const handleSelectShareTheme = themeId => {
     setShareThemeId(themeId);
   };
@@ -406,6 +528,7 @@ function AppContent() {
     setSelectedWritingId(null);
     setSelectedSectionId(null);
     setRandomPassage(null);
+    setProgramReturnScreen(null);
   };
 
   const handleBackToSections = () => {
@@ -507,12 +630,22 @@ function AppContent() {
       <View style={styles.homeContainer}>
         <View style={styles.homeHeader}>
           <Text style={styles.sectionTitle}>Baha'i Writings</Text>
-          <TouchableOpacity
-            onPress={handleOpenSettings}
-            style={styles.settingsButton}
-          >
-            <Text style={styles.settingsButtonLabel}>Settings</Text>
-          </TouchableOpacity>
+          <View style={styles.homeHeaderActions}>
+            <TouchableOpacity
+              onPress={handleOpenProgram}
+              style={[styles.programButton, styles.programButtonHome]}
+            >
+              <Text style={styles.programButtonLabel}>
+                {programButtonLabel}
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleOpenSettings}
+              style={styles.settingsButton}
+            >
+              <Text style={styles.settingsButtonLabel}>Settings</Text>
+            </TouchableOpacity>
+          </View>
         </View>
         <TouchableOpacity
           onPress={handleShowRandomPassage}
@@ -557,12 +690,22 @@ function AppContent() {
   } else if (currentScreen === 'settings') {
     screenContent = (
       <View style={styles.screenSurface}>
-        <TouchableOpacity
-          onPress={handleCloseSettings}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonLabel}>Back to home</Text>
-        </TouchableOpacity>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleCloseSettings}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonLabel}>Back to home</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleOpenProgram}
+            style={styles.programButton}
+          >
+            <Text style={styles.programButtonLabel}>
+              {programButtonLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Settings
         </Text>
@@ -610,12 +753,22 @@ function AppContent() {
   } else if (currentScreen === 'share' && shareContext) {
     screenContent = (
       <View style={styles.screenSurface}>
-        <TouchableOpacity
-          onPress={handleCloseShare}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonLabel}>{shareBackButtonLabel}</Text>
-        </TouchableOpacity>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleCloseShare}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonLabel}>{shareBackButtonLabel}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleOpenProgram}
+            style={styles.programButton}
+          >
+            <Text style={styles.programButtonLabel}>
+              {programButtonLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Share this passage
         </Text>
@@ -710,15 +863,108 @@ function AppContent() {
         </TouchableOpacity>
       </View>
     );
+  } else if (currentScreen === 'program') {
+    screenContent = (
+      <View style={styles.screenSurface}>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleCloseProgram}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonLabel}>
+              {programBackButtonLabel}
+            </Text>
+          </TouchableOpacity>
+          {hasProgramPassages ? (
+            <TouchableOpacity
+              onPress={handleClearProgram}
+              style={styles.programClearButton}
+            >
+              <Text style={styles.programClearLabel}>Clear all</Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
+          Devotional Program
+        </Text>
+        <Text
+          style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}
+        >
+          Gather passages into a single flow before you share.
+        </Text>
+        {hasProgramPassages ? (
+          <FlatList
+            data={programPassages}
+            keyExtractor={item => item.id}
+            style={styles.programList}
+            contentContainerStyle={styles.programListContent}
+            renderItem={({ item, index }) => (
+              <View style={styles.passageCard}>
+                <View style={styles.programCardHeader}>
+                  <View style={styles.programCardMeta}>
+                    <Text style={styles.programCardTitle}>
+                      {index + 1}. {item.writingTitle ?? 'Selected passage'}
+                    </Text>
+                    {item.sectionTitle ? (
+                      <Text style={styles.programCardSubtitle}>
+                        {item.sectionTitle}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleRemoveFromProgram(item.id)}
+                    style={styles.programRemoveButton}
+                  >
+                    <Text style={styles.programRemoveLabel}>Remove</Text>
+                  </TouchableOpacity>
+                </View>
+                <View style={styles.blockWrapper}>
+                  {renderBlockContent(item.block, 0)}
+                </View>
+              </View>
+            )}
+            ListFooterComponent={() => (
+              <View style={styles.programShareFooter}>
+                <TouchableOpacity
+                  onPress={handleShareProgram}
+                  style={styles.shareNowButton}
+                >
+                  <Text style={styles.shareNowButtonLabel}>
+                    Share devotional program
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          />
+        ) : (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyStateText}>
+              No passages added yet. Explore the library or daily passages and
+              tap "Add to program" to build your devotional.
+            </Text>
+          </View>
+        )}
+      </View>
+    );
   } else if (currentScreen === 'writing' && selectedWriting) {
     screenContent = (
       <View style={styles.screenSurface}>
-        <TouchableOpacity
-          onPress={handleBackToHome}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonLabel}>Back to library</Text>
-        </TouchableOpacity>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleBackToHome}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonLabel}>Back to library</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleOpenProgram}
+            style={styles.programButton}
+          >
+            <Text style={styles.programButtonLabel}>
+              {programButtonLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           {selectedWriting.title}
         </Text>
@@ -768,12 +1014,22 @@ function AppContent() {
     screenContent = (
       <View style={[styles.screenSurface, styles.sectionScreenSurface]}>
         <View style={styles.sectionHeader}>
-          <TouchableOpacity
-            onPress={handleBackToSections}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>Back to sections</Text>
-          </TouchableOpacity>
+          <View style={styles.sectionHeaderTopRow}>
+            <TouchableOpacity
+              onPress={handleBackToSections}
+              style={styles.backButton}
+            >
+              <Text style={styles.backButtonLabel}>Back to sections</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleOpenProgram}
+              style={styles.programButton}
+            >
+              <Text style={styles.programButtonLabel}>
+                {programButtonLabel}
+              </Text>
+            </TouchableOpacity>
+          </View>
           <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
             {selectedWriting.title}
           </Text>
@@ -840,7 +1096,25 @@ function AppContent() {
                         {renderBlockContent(item, index)}
                       </View>
                     </ScrollView>
-                    <View style={styles.sectionPagerFooter}>
+                    <View
+                      style={[styles.sectionPagerFooter, styles.actionChipRow]}
+                    >
+                      <TouchableOpacity
+                        onPress={() =>
+                          handleAddToProgram({
+                            block: item,
+                            writingId: selectedWriting.id,
+                            writingTitle: selectedWriting.title,
+                            sectionId: selectedSection.id,
+                            sectionTitle: selectedSection.title,
+                          })
+                        }
+                        style={[styles.shareActionChip, styles.chipInRow]}
+                      >
+                        <Text style={styles.shareActionChipLabel}>
+                          Add to program
+                        </Text>
+                      </TouchableOpacity>
                       <TouchableOpacity
                         onPress={() =>
                           handleOpenShare({
@@ -850,7 +1124,11 @@ function AppContent() {
                             returnScreen: 'section',
                           })
                         }
-                        style={styles.shareActionChip}
+                        style={[
+                          styles.shareActionChip,
+                          styles.chipInRow,
+                          styles.chipSpacing,
+                        ]}
                       >
                         <Text style={styles.shareActionChipLabel}>Share</Text>
                       </TouchableOpacity>
@@ -866,12 +1144,22 @@ function AppContent() {
   } else if (currentScreen === 'passage' && randomPassage) {
     screenContent = (
       <View style={styles.screenSurface}>
-        <TouchableOpacity
-          onPress={handleBackToHome}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonLabel}>Back to library</Text>
-        </TouchableOpacity>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleBackToHome}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonLabel}>Back to library</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleOpenProgram}
+            style={styles.programButton}
+          >
+            <Text style={styles.programButtonLabel}>
+              {programButtonLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Daily Passage
         </Text>
@@ -898,19 +1186,35 @@ function AppContent() {
           <View style={styles.passageCard}>
             <View style={styles.blockWrapper}>
               {renderBlockContent(randomPassage.block, 0)}
-              <TouchableOpacity
-                onPress={() =>
-                  handleOpenShare({
-                    block: randomPassage.block,
-                    writingTitle: randomPassage.writingTitle,
-                    sectionTitle: randomPassage.sectionTitle,
-                    returnScreen: 'passage',
-                  })
-                }
-                style={styles.shareActionChip}
-              >
-                <Text style={styles.shareActionChipLabel}>Share</Text>
-              </TouchableOpacity>
+              <View style={styles.actionChipRow}>
+                <TouchableOpacity
+                  onPress={() =>
+                    handleAddToProgram({
+                      block: randomPassage.block,
+                      writingId: randomPassage.writingId,
+                      writingTitle: randomPassage.writingTitle,
+                      sectionId: randomPassage.sectionId,
+                      sectionTitle: randomPassage.sectionTitle,
+                    })
+                  }
+                  style={[styles.shareActionChip, styles.chipInRow]}
+                >
+                  <Text style={styles.shareActionChipLabel}>Add to program</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() =>
+                    handleOpenShare({
+                      block: randomPassage.block,
+                      writingTitle: randomPassage.writingTitle,
+                      sectionTitle: randomPassage.sectionTitle,
+                      returnScreen: 'passage',
+                    })
+                  }
+                  style={[styles.shareActionChip, styles.chipInRow, styles.chipSpacing]}
+                >
+                  <Text style={styles.shareActionChipLabel}>Share</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </ScrollView>
@@ -925,12 +1229,22 @@ function AppContent() {
   } else {
     screenContent = (
       <View style={styles.screenSurface}>
-        <TouchableOpacity
-          onPress={handleBackToHome}
-          style={styles.backButton}
-        >
-          <Text style={styles.backButtonLabel}>Back to library</Text>
-        </TouchableOpacity>
+        <View style={styles.topBar}>
+          <TouchableOpacity
+            onPress={handleBackToHome}
+            style={styles.backButton}
+          >
+            <Text style={styles.backButtonLabel}>Back to library</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handleOpenProgram}
+            style={styles.programButton}
+          >
+            <Text style={styles.programButtonLabel}>
+              {programButtonLabel}
+            </Text>
+          </TouchableOpacity>
+        </View>
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>
             The selected content is not available.
@@ -971,6 +1285,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  homeHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  programButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f7f0e3',
+    marginLeft: 12,
+  },
+  programButtonHome: {
+    marginLeft: 0,
+    marginRight: 8,
+  },
+  programButtonLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b2a15',
   },
   sectionTitle: {
     fontSize: 22,
@@ -1044,6 +1380,12 @@ const styles = StyleSheet.create({
     color: '#6f5a35',
     marginTop: 4,
   },
+  topBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
   screenSurface: {
     flex: 1,
     borderRadius: 16,
@@ -1057,14 +1399,12 @@ const styles = StyleSheet.create({
     borderRadius: 0,
   },
   backButton: {
-    alignSelf: 'flex-start',
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#d7c5a8',
     backgroundColor: '#f0e4d2',
-    marginBottom: 16,
   },
   backButtonLabel: {
     fontSize: 15,
@@ -1106,6 +1446,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingBottom: 16,
   },
+  sectionHeaderTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 16,
+  },
   passageMeta: {
     marginBottom: 16,
   },
@@ -1134,6 +1480,67 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 24,
   },
+  programList: {
+    flex: 1,
+    marginTop: 16,
+  },
+  programListContent: {
+    paddingBottom: 32,
+  },
+  programCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 12,
+  },
+  programCardMeta: {
+    flex: 1,
+    paddingRight: 12,
+  },
+  programCardTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c1f0c',
+  },
+  programCardSubtitle: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginTop: 4,
+  },
+  programRemoveButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f0e4d2',
+  },
+  programRemoveLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3b2a15',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  programShareFooter: {
+    paddingVertical: 24,
+    alignItems: 'center',
+  },
+  programClearButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f7f0e3',
+  },
+  programClearLabel: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#3b2a15',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   secondaryButton: {
     alignSelf: 'center',
     paddingVertical: 12,
@@ -1153,7 +1560,6 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   shareActionChip: {
-    alignSelf: 'flex-end',
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 12,
@@ -1168,6 +1574,17 @@ const styles = StyleSheet.create({
     color: '#3b2a15',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  actionChipRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  chipInRow: {
+    alignSelf: 'auto',
+  },
+  chipSpacing: {
+    marginLeft: 12,
   },
   sectionPagerIndicator: {
     alignSelf: 'flex-start',
@@ -1215,7 +1632,6 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   sectionPagerFooter: {
-    alignItems: 'flex-end',
     paddingTop: 8,
   },
   sectionEmptyText: {
