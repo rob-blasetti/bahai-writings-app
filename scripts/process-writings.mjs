@@ -74,6 +74,12 @@ function normalizeTitle(text) {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+function normalizeShareParts(parts) {
+  return parts
+    .map(part => normalizeWhitespace(part))
+    .filter(part => part.length > 0);
+}
+
 function detectBlockType($node) {
   if (!$node || $node.length === 0) {
     return 'paragraph';
@@ -119,12 +125,86 @@ function findSourceId($node) {
   return null;
 }
 
-function collectSectionContent(anchor, nextAnchor, sectionId, $) {
+function buildFootnoteMap($) {
+  const map = new Map();
+
+  $('li').each((_, li) => {
+    const container = $(li);
+    const numberAnchor = container.find('a.td').first();
+    const contentAnchor = container.find('a.sf[id]').first();
+    const backLink = container.find('a.jc[href^="#"]').first();
+
+    if (!numberAnchor.length || !contentAnchor.length || !backLink.length) {
+      return;
+    }
+
+    const id = contentAnchor.attr('id');
+    if (!id) {
+      return;
+    }
+
+    let textSource = contentAnchor.parent('p');
+    if (!textSource || !textSource.length) {
+      textSource = container;
+    }
+
+    const text = normalizeWhitespace(textSource.text() ?? '');
+    if (!text) {
+      return;
+    }
+
+    const number = normalizeWhitespace(numberAnchor.text() ?? '') || null;
+
+    map.set(id, {
+      id,
+      number,
+      text,
+      targetId: backLink.attr('href')?.replace(/^#/, '') ?? null,
+    });
+  });
+
+  return map;
+}
+
+function collectSectionContent(anchor, nextAnchor, sectionId, $, footnoteMap) {
   const wrap = node => $(node);
   const blocks = [];
   let fallbackCounter = 0;
 
-  const pushBlock = (rawText, type, sourceId) => {
+  const collectFootnoteRefs = $node => {
+    if (
+      !$node ||
+      !$node.length ||
+      !footnoteMap ||
+      typeof footnoteMap.size !== 'number' ||
+      footnoteMap.size === 0
+    ) {
+      return [];
+    }
+
+    const refs = [];
+    const seen = new Set();
+    $node.find('sup a[href^=\"#\"]').each((_, anchor) => {
+      const href = anchor.attribs?.href ?? '';
+      if (typeof href !== 'string' || href.length === 0) {
+        return;
+      }
+      const id = href.replace(/^#/, '');
+      if (!id || seen.has(id)) {
+        return;
+      }
+      const entry = footnoteMap.get(id);
+      if (!entry) {
+        return;
+      }
+      seen.add(id);
+      refs.push(entry);
+    });
+
+    return refs;
+  };
+
+  const pushBlock = ($node, rawText, type, sourceId) => {
     const text = normalizeWhitespace(rawText ?? '');
     if (!text) {
       return;
@@ -135,6 +215,15 @@ function collectSectionContent(anchor, nextAnchor, sectionId, $) {
       type,
       text,
       sourceId: sourceId ?? null,
+      sourceClass:
+        ($node && typeof $node.attr === 'function'
+          ? ($node.attr('class') ?? '').trim()
+          : '') || null,
+      sourceTag:
+        ($node && $node[0] && typeof $node[0].name === 'string'
+          ? $node[0].name
+          : null) || null,
+      footnoteRefs: collectFootnoteRefs($node),
     });
   };
 
@@ -147,7 +236,7 @@ function collectSectionContent(anchor, nextAnchor, sectionId, $) {
     if (type === 'text') {
       const text = normalizeWhitespace($node.text());
       if (text) {
-        pushBlock(text, 'paragraph', null);
+        pushBlock(null, text, 'paragraph', null);
       }
       return;
     }
@@ -159,14 +248,19 @@ function collectSectionContent(anchor, nextAnchor, sectionId, $) {
     const blockType = detectBlockType($node);
 
     if ($node.is('p') || $node.is('h4') || $node.is('h5') || $node.is('h6')) {
-      pushBlock($node.text(), blockType, findSourceId($node));
+      pushBlock($node, $node.text(), blockType, findSourceId($node));
       return;
     }
 
     if ($node.is('blockquote')) {
       $node.find('p').each((_, p) => {
         const paragraph = wrap(p);
-        pushBlock(paragraph.text(), 'quote', findSourceId(paragraph));
+        pushBlock(
+          paragraph,
+          paragraph.text(),
+          'quote',
+          findSourceId(paragraph),
+        );
       });
       return;
     }
@@ -181,7 +275,7 @@ function collectSectionContent(anchor, nextAnchor, sectionId, $) {
         }
       });
       if (lines.length > 0) {
-        pushBlock(lines.join('\n'), 'list', findSourceId($node));
+        pushBlock($node, lines.join('\n'), 'list', findSourceId($node));
       }
       return;
     }
@@ -200,7 +294,7 @@ function collectSectionContent(anchor, nextAnchor, sectionId, $) {
         processNode(wrap(child));
       });
     } else {
-      pushBlock($node.text(), blockType, findSourceId($node));
+      pushBlock($node, $node.text(), blockType, findSourceId($node));
     }
   };
 
@@ -224,9 +318,148 @@ function collectSectionContent(anchor, nextAnchor, sectionId, $) {
   return blocks;
 }
 
+function isSeparatorText(text) {
+  const normalized = normalizeWhitespace(text).replace(/\s+/g, ' ');
+  return normalized === '* * *';
+}
+
+function isStandaloneNumber(text) {
+  return /^[IVXLCDM0-9]+$/.test(text.trim());
+}
+
+function isAttributionText(text) {
+  const trimmed = text.trim();
+  return /^[-–—]\s*/.test(trimmed) || /^--\s*/.test(trimmed);
+}
+
+function postProcessBlocks(blocks) {
+  const processed = [];
+
+  const ensureShareParts = block => {
+    if (!Array.isArray(block.shareParts)) {
+      block.shareParts = [];
+    }
+    if (block.shareParts.length === 0 && block.text?.length) {
+      block.shareParts.push(block.text);
+    }
+  };
+
+  for (const block of blocks) {
+    const text = typeof block.text === 'string' ? block.text.trim() : '';
+    const hasFootnoteRefs = Array.isArray(block.footnoteRefs) && block.footnoteRefs.length > 0;
+
+    if (!text && !hasFootnoteRefs) {
+      continue;
+    }
+
+    if (text && isSeparatorText(text)) {
+      continue;
+    }
+
+    if (text && isStandaloneNumber(text)) {
+      continue;
+    }
+
+    if (text && isAttributionText(text)) {
+      const target = processed[processed.length - 1];
+      if (target) {
+        ensureShareParts(target);
+        target.attribution = target.attribution
+          ? `${target.attribution}
+${text}`
+          : text;
+        target.shareParts.push(text);
+      } else {
+        processed.push({
+          ...block,
+          text: '',
+          attribution: text,
+          shareParts: [text],
+        });
+      }
+      continue;
+    }
+
+    const nextBlock = {
+      ...block,
+      text,
+    };
+
+    ensureShareParts(nextBlock);
+
+    if (hasFootnoteRefs) {
+      const formattedFootnotes = block.footnoteRefs
+        .map(ref => {
+          const value = typeof ref?.text === 'string' ? normalizeWhitespace(ref.text) : '';
+          if (!value) {
+            return null;
+          }
+          const number = typeof ref?.number === 'string' && ref.number.trim().length > 0
+            ? ref.number.trim()
+            : null;
+          return number ? `${number}. ${value}` : value;
+        })
+        .filter(Boolean);
+
+      if (formattedFootnotes.length > 0) {
+        nextBlock.footnotes = formattedFootnotes;
+        nextBlock.shareParts.push(...formattedFootnotes);
+      }
+    }
+
+    processed.push(nextBlock);
+  }
+
+  return processed.map(block => {
+    const shareParts = normalizeShareParts(block.shareParts ?? []);
+    const cleanFootnotes = Array.isArray(block.footnotes)
+      ? normalizeShareParts(block.footnotes)
+      : [];
+    const cleanAttribution =
+      typeof block.attribution === 'string'
+        ? normalizeWhitespace(block.attribution)
+        : null;
+    const cleanText =
+      typeof block.text === 'string' ? normalizeWhitespace(block.text) : '';
+
+    const shareTextParts = shareParts.length
+      ? shareParts
+      : [cleanText, cleanAttribution, ...cleanFootnotes];
+    const shareText = normalizeWhitespace(
+      shareTextParts.filter(Boolean).join('\n\n'),
+    );
+
+    const result = {
+      ...block,
+      text: cleanText,
+      shareText: shareText.length > 0 ? shareText : cleanText,
+    };
+
+    if (cleanFootnotes.length > 0) {
+      result.footnotes = cleanFootnotes;
+    } else {
+      delete result.footnotes;
+    }
+
+    if (cleanAttribution && cleanAttribution.length > 0) {
+      result.attribution = cleanAttribution;
+    } else {
+      delete result.attribution;
+    }
+
+    delete result.shareParts;
+    delete result.sourceClass;
+    delete result.sourceTag;
+    delete result.footnoteRefs;
+
+    return result;
+  });
+}
+
 function extractSectionsFromDocument($) {
   const sections = [];
   const anchors = $('body div.ic').filter((_, element) => $(element).find('h2').length > 0);
+  const footnoteMap = buildFootnoteMap($);
 
   anchors.each((index, element) => {
     const anchor = $(element);
@@ -244,13 +477,17 @@ function extractSectionsFromDocument($) {
 
     const slugId = slugify(combinedTitle || baseTitle || `section-${index + 1}`);
     const nextAnchor = anchors.eq(index + 1);
-    const blocks = collectSectionContent(anchor, nextAnchor, slugId, $);
+    const blocks = postProcessBlocks(
+      collectSectionContent(anchor, nextAnchor, slugId, $, footnoteMap),
+    );
 
     sections.push({
       id: slugId,
       title: combinedTitle || baseTitle || `Section ${sections.length + 1}`,
       blocks,
-      paragraphs: blocks.map(block => block.text),
+      paragraphs: blocks.map(block =>
+        normalizeWhitespace(block.shareText ?? block.text ?? ''),
+      ),
     });
   });
 

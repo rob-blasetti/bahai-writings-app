@@ -51,8 +51,28 @@ function normalizeSectionBlocks(section, fallbackSectionId, fallbackText = '') {
   if (Array.isArray(section?.blocks) && section.blocks.length > 0) {
     return section.blocks
       .map((block, index) => {
-        const text = cleanBlockText(block?.text ?? '');
-        if (!text) {
+        const rawText = typeof block?.text === 'string' ? block.text : '';
+        const text = cleanBlockText(rawText);
+        const rawAttribution =
+          typeof block?.attribution === 'string' ? block.attribution : '';
+        const attribution = cleanBlockText(rawAttribution);
+        const rawFootnotes = Array.isArray(block?.footnotes)
+          ? block.footnotes
+          : [];
+        const footnotes = rawFootnotes
+          .map(note => cleanBlockText(note))
+          .filter(Boolean);
+        const rawShareText =
+          typeof block?.shareText === 'string' ? block.shareText : '';
+        const shareText = cleanBlockText(rawShareText);
+
+        const hasContent =
+          text.length > 0 ||
+          attribution.length > 0 ||
+          footnotes.length > 0 ||
+          shareText.length > 0;
+
+        if (!hasContent) {
           return null;
         }
         return {
@@ -60,6 +80,14 @@ function normalizeSectionBlocks(section, fallbackSectionId, fallbackText = '') {
           type: block?.type ?? 'paragraph',
           text,
           sourceId: block?.sourceId ?? null,
+          attribution: attribution.length > 0 ? attribution : null,
+          footnotes,
+          shareText:
+            shareText.length > 0
+              ? shareText
+              : [text, attribution, ...footnotes]
+                  .filter(Boolean)
+                  .join('\n\n'),
         };
       })
       .filter(Boolean);
@@ -216,6 +244,17 @@ function AppContent() {
       listItemText: {
         fontSize: 16 * fontScale,
         lineHeight: 24 * fontScale,
+      },
+      passageNumber: {
+        fontWeight: '700',
+      },
+      attributionText: {
+        fontSize: 15 * fontScale,
+        lineHeight: 24 * fontScale,
+      },
+      footnoteText: {
+        fontSize: 14 * fontScale,
+        lineHeight: 22 * fontScale,
       },
       passageMetaWriting: {
         fontSize: 20 * fontScale,
@@ -492,7 +531,10 @@ function AppContent() {
 
     const { block, writingTitle, sectionTitle } = shareContext;
     const sectionLine = sectionTitle ? `, ${sectionTitle}` : '';
-    const message = `"${block.text}"\n\n— ${writingTitle}${sectionLine}`;
+    const fallbackShareText = block?.shareText ?? block?.text ?? '';
+    const blockText =
+      cleanBlockText(fallbackShareText) || fallbackShareText || '';
+    const message = `"${blockText}"\n\n— ${writingTitle}${sectionLine}`;
 
     try {
       await Share.share({ message });
@@ -518,8 +560,11 @@ function AppContent() {
     const safeBlock = {
       id: blockId,
       text: block.text,
+      shareText: block.shareText ?? block.text,
       type: block.type ?? 'paragraph',
       sourceId: block.sourceId ?? null,
+      attribution: block.attribution ?? null,
+      footnotes: Array.isArray(block.footnotes) ? [...block.footnotes] : [],
     };
     const programItem = {
       id: `program-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
@@ -584,7 +629,11 @@ function AppContent() {
         const sourceLine = item.sectionTitle
           ? `${item.writingTitle} — ${item.sectionTitle}`
           : item.writingTitle ?? 'Selected passage';
-        return `${index + 1}. ${sourceLine}\n${item.block.text}`;
+        const fallbackShareText =
+          item.block?.shareText ?? item.block?.text ?? '';
+        const blockText =
+          cleanBlockText(fallbackShareText) || fallbackShareText || '';
+        return `${index + 1}. ${sourceLine}\n${blockText}`;
       })
       .join('\n\n');
     const message = `${header}\n\n${body}`;
@@ -626,12 +675,15 @@ function AppContent() {
       passages: programPassages.map(item => ({
         blockId: item.block.id,
         text: item.block.text,
+        shareText: item.block.shareText ?? item.block.text,
         type: item.block.type,
         writingId: item.writingId,
         writingTitle: item.writingTitle,
         sectionId: item.sectionId,
         sectionTitle: item.sectionTitle,
         sourceId: item.block.sourceId,
+        attribution: item.block.attribution ?? null,
+        footnotes: item.block.footnotes ?? [],
       })),
     };
 
@@ -732,6 +784,94 @@ function AppContent() {
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
 
   const renderBlockContent = (block, index) => {
+    const renderTextWithNumber = ({
+      text,
+      style,
+      key,
+      numberStyle,
+    }) => {
+      if (typeof text !== 'string' || text.length === 0) {
+        return null;
+      }
+
+      const numberMatch =
+        text.match(/^(\d{1,3})([.)]\s+)([\s\S]+)$/) ||
+        text.match(/^(\d{1,3})(\s{2,})([\s\S]+)$/);
+
+      if (!numberMatch) {
+        return (
+          <Text key={key} style={style}>
+            {text}
+          </Text>
+        );
+      }
+
+      const number = numberMatch[1];
+      const delimiter = numberMatch[2];
+      const remainder = numberMatch[3] ?? '';
+      const normalizedDelimiter = /\s{2,}/.test(delimiter)
+        ? ' '
+        : delimiter;
+      const numberStyleArray = Array.isArray(numberStyle)
+        ? numberStyle
+        : numberStyle
+        ? [numberStyle]
+        : [];
+
+      return (
+        <Text key={key} style={style}>
+          <Text
+            style={[
+              styles.passageNumber,
+              scaledTypography.passageNumber,
+              ...numberStyleArray,
+            ]}
+          >
+            {number}
+          </Text>
+          {normalizedDelimiter}
+          {remainder}
+        </Text>
+      );
+    };
+
+    const hasFootnotes = Array.isArray(block.footnotes) && block.footnotes.length > 0;
+    const hasAttribution =
+      typeof block.attribution === 'string' && block.attribution.length > 0;
+    const renderMeta = () => {
+      if (!hasFootnotes && !hasAttribution) {
+        return null;
+      }
+      return (
+        <>
+          {hasAttribution ? (
+            <Text
+              style={[
+                styles.attributionText,
+                scaledTypography.attributionText,
+              ]}
+            >
+              {block.attribution}
+            </Text>
+          ) : null}
+          {hasFootnotes ? (
+            <View style={styles.footnoteContainer}>
+              {block.footnotes.map((footnote, footnoteIndex) => (
+                renderTextWithNumber({
+                  key: `${block.id}-footnote-${footnoteIndex}`,
+                  text: footnote,
+                  style: [
+                    styles.footnoteText,
+                    scaledTypography.footnoteText,
+                  ],
+                })
+              ))}
+            </View>
+          ) : null}
+        </>
+      );
+    };
+
     if (block.type === 'heading') {
       return (
         <Text
@@ -747,63 +887,84 @@ function AppContent() {
     }
 
     if (block.type === 'quote') {
+      const meta = renderMeta();
       return (
-        <View
-          style={[styles.quoteBlock, index === 0 && styles.firstBlock]}
-        >
-          <Text
-            style={[styles.quoteText, scaledTypography.quoteText]}
+        <View style={styles.blockContainer}>
+          <View
+            style={[styles.quoteBlock, index === 0 && styles.firstBlock]}
           >
-            {block.text}
-          </Text>
+            <Text
+              style={[styles.quoteText, scaledTypography.quoteText]}
+            >
+              {block.text}
+            </Text>
+          </View>
+          {meta}
         </View>
       );
     }
 
     if (block.type === 'poetry') {
+      const meta = renderMeta();
       return (
-        <View
-          style={[styles.poetryBlock, index === 0 && styles.firstBlock]}
-        >
-          {block.text.split('\n').map((line, lineIndex) => (
-            <Text
-              key={`${block.id}-line-${lineIndex}`}
-              style={[styles.poetryLine, scaledTypography.poetryLine]}
-            >
-              {line}
-            </Text>
-          ))}
+        <View style={styles.blockContainer}>
+          <View
+            style={[styles.poetryBlock, index === 0 && styles.firstBlock]}
+          >
+            {block.text.split('\n').map((line, lineIndex) => (
+              renderTextWithNumber({
+                key: `${block.id}-line-${lineIndex}`,
+                text: line,
+                style: [
+                  styles.poetryLine,
+                  scaledTypography.poetryLine,
+                ],
+              })
+            ))}
+          </View>
+          {meta}
         </View>
       );
     }
 
     if (block.type === 'list') {
+      const meta = renderMeta();
       return (
-        <View
-          style={[styles.listBlock, index === 0 && styles.firstBlock]}
-        >
-          {block.text.split('\n').map((line, lineIndex) => (
-            <Text
-              key={`${block.id}-item-${lineIndex}`}
-              style={[styles.listItemText, scaledTypography.listItemText]}
-            >
-              {line}
-            </Text>
-          ))}
+        <View style={styles.blockContainer}>
+          <View
+            style={[styles.listBlock, index === 0 && styles.firstBlock]}
+          >
+            {block.text.split('\n').map((line, lineIndex) => (
+              renderTextWithNumber({
+                key: `${block.id}-item-${lineIndex}`,
+                text: line,
+                style: [
+                  styles.listItemText,
+                  scaledTypography.listItemText,
+                ],
+              })
+            ))}
+          </View>
+          {meta}
         </View>
       );
     }
 
+    const meta = renderMeta();
     return (
-      <Text
-        style={[
-          styles.contentParagraph,
-          index === 0 && styles.contentParagraphFirst,
-          scaledTypography.contentParagraph,
-        ]}
-      >
-        {block.text}
-      </Text>
+      <View style={[styles.blockContainer, index === 0 && styles.firstBlock]}>
+        {block.text
+          ? renderTextWithNumber({
+              text: block.text,
+              style: [
+                styles.contentParagraph,
+                index === 0 && styles.contentParagraphFirst,
+                scaledTypography.contentParagraph,
+              ],
+            })
+          : null}
+        {meta}
+      </View>
     );
   };
 
@@ -1745,6 +1906,9 @@ const styles = StyleSheet.create({
   contentParagraphFirst: {
     marginTop: 0,
   },
+  blockContainer: {
+    marginBottom: 16,
+  },
   quoteBlock: {
     borderLeftWidth: 3,
     borderLeftColor: '#d7c5a8',
@@ -1781,8 +1945,32 @@ const styles = StyleSheet.create({
     color: '#3b2a15',
     marginBottom: 4,
   },
+  passageNumber: {
+    color: '#8c6239',
+    fontWeight: '700',
+  },
   firstBlock: {
     marginTop: 0,
+  },
+  footnoteContainer: {
+    marginTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: '#d7c5a8',
+    paddingTop: 10,
+  },
+  footnoteText: {
+    fontSize: 14,
+    lineHeight: 22,
+    color: '#5c4827',
+    marginTop: 4,
+  },
+  attributionText: {
+    fontSize: 15,
+    lineHeight: 24,
+    fontStyle: 'italic',
+    color: '#4a371c',
+    textAlign: 'right',
+    marginTop: 12,
   },
   emptyState: {
     flex: 1,
