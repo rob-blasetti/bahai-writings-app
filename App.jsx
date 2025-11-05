@@ -1,25 +1,30 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Alert,
   Dimensions,
-  FlatList,
-  ScrollView,
   Share,
   StatusBar,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   useColorScheme,
   View,
 } from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import writingsManifest from './assets/generated/writings.json';
+import { authenticateLiquidSpirit } from './services/liquidSpiritAuth';
+import HomeScreen from './screens/HomeScreen';
+import SignInScreen from './screens/SignInScreen';
+import LibraryScreen from './screens/LibraryScreen';
+import SettingsScreen from './screens/SettingsScreen';
+import ShareScreen from './screens/ShareScreen';
+import ProgramScreen from './screens/ProgramScreen';
+import WritingScreen from './screens/WritingScreen';
+import SectionScreen from './screens/SectionScreen';
+import PassageScreen from './screens/PassageScreen';
+import UnavailableScreen from './screens/UnavailableScreen';
 
 const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
@@ -150,6 +155,11 @@ function AppContent() {
     [],
   );
   const [currentScreen, setCurrentScreen] = useState('home');
+  const [authenticatedUser, setAuthenticatedUser] = useState(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const [authError, setAuthError] = useState(null);
   const [selectedWritingId, setSelectedWritingId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
   const [randomPassage, setRandomPassage] = useState(null);
@@ -287,7 +297,10 @@ function AppContent() {
     if (shareContext.returnScreen === 'section') {
       return 'Back to reading';
     }
-    return 'Back to home';
+    if (shareContext.returnScreen === 'library') {
+      return 'Back to library';
+    }
+    return 'Back';
   }, [shareContext]);
   const selectedWriting = useMemo(
     () => writings.find(item => item.id === selectedWritingId) ?? null,
@@ -331,8 +344,8 @@ function AppContent() {
     if (programReturnScreen === 'settings') {
       return 'Back to settings';
     }
-    if (programReturnScreen === 'home') {
-      return 'Back to home';
+    if (programReturnScreen === 'library') {
+      return 'Back to library';
     }
     return 'Back';
   }, [programReturnScreen]);
@@ -405,8 +418,69 @@ function AppContent() {
     setCurrentScreen('share');
   };
 
+  const handleContinueAsGuest = () => {
+    setAuthenticatedUser(null);
+    setAuthError(null);
+    setAuthPassword('');
+    setCurrentScreen('library');
+  };
+
+  const handleStartSignIn = () => {
+    setAuthError(null);
+    setCurrentScreen('signin');
+  };
+
+  const handleCancelSignIn = () => {
+    setIsAuthenticating(false);
+    setAuthError(null);
+    setCurrentScreen('home');
+  };
+
+  const handleSignIn = async () => {
+    const trimmedEmail = authEmail.trim();
+    const hasPassword = authPassword.length > 0;
+
+    if (!trimmedEmail || !hasPassword) {
+      setAuthError('Enter both email and password to continue.');
+      return;
+    }
+
+    setAuthEmail(trimmedEmail);
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await authenticateLiquidSpirit({
+        email: trimmedEmail,
+        password: authPassword,
+      });
+      const inferredName =
+        result?.user?.name ??
+        result?.profile?.name ??
+        result?.name ??
+        authenticatedUser?.name ??
+        'Kali';
+
+      setAuthenticatedUser({
+        name: inferredName,
+        email: trimmedEmail,
+        token: result?.token ?? result?.accessToken ?? null,
+      });
+      setAuthPassword('');
+      setCurrentScreen('library');
+      Alert.alert(
+        'Signed in',
+        inferredName ? `Welcome, ${inferredName}!` : 'You are signed in.',
+      );
+    } catch (error) {
+      setAuthError(error?.message ?? 'Unable to sign in. Please try again.');
+    } finally {
+      setIsAuthenticating(false);
+    }
+  };
+
   const handleCloseShare = () => {
-    const nextScreen = shareContext?.returnScreen ?? 'home';
+    const nextScreen = shareContext?.returnScreen ?? 'library';
     setShareContext(null);
     setCurrentScreen(nextScreen);
   };
@@ -482,7 +556,7 @@ function AppContent() {
   };
 
   const handleCloseProgram = () => {
-    const nextScreen = programReturnScreen ?? 'home';
+    const nextScreen = programReturnScreen ?? 'library';
     setProgramReturnScreen(null);
     setCurrentScreen(nextScreen);
   };
@@ -607,6 +681,19 @@ function AppContent() {
     }
   };
 
+  const handleProgramTitleChange = text => {
+    setProgramTitle(text);
+    if (text.trim().length > 0) {
+      setProgramSubmissionError(null);
+      setProgramSubmissionSuccess(null);
+    }
+  };
+
+  const handleProgramNotesChange = text => {
+    setProgramNotes(text);
+    setProgramSubmissionSuccess(null);
+  };
+
   const handleSelectShareTheme = themeId => {
     setShareThemeId(themeId);
   };
@@ -616,11 +703,11 @@ function AppContent() {
   };
 
   const handleCloseSettings = () => {
-    setCurrentScreen('home');
+    setCurrentScreen('library');
   };
 
   const handleBackToHome = () => {
-    setCurrentScreen('home');
+    setCurrentScreen('library');
     setSelectedWritingId(null);
     setSelectedSectionId(null);
     setRandomPassage(null);
@@ -643,86 +730,6 @@ function AppContent() {
 
   const hasPassages = availablePassages.length > 0;
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
-  const ProgramIconButton = ({ style, showLabel = false }) => {
-    const badge = hasProgramPassages ? (
-      <View style={styles.iconBadge}>
-        <Text style={styles.iconBadgeLabel}>{programBadgeLabel}</Text>
-      </View>
-    ) : null;
-
-    if (showLabel) {
-      return (
-        <TouchableOpacity
-          onPress={handleOpenProgram}
-          style={[styles.homeActionButton, style]}
-          accessibilityRole="button"
-          accessibilityLabel={
-            hasProgramPassages
-              ? `Open devotional program, ${programBadgeLabel} passages added`
-              : 'Open devotional program'
-          }
-          accessibilityHint="Review or share the passages you have gathered."
-        >
-          <View style={styles.iconButton}>
-            <Ionicons name="book-outline" size={22} color="#3b2a15" />
-            {badge}
-          </View>
-          <Text style={styles.homeActionLabel}>Create Devotional</Text>
-        </TouchableOpacity>
-      );
-    }
-
-    return (
-      <TouchableOpacity
-        onPress={handleOpenProgram}
-        style={[styles.iconButtonContainer, style]}
-        accessibilityRole="button"
-        accessibilityLabel={
-          hasProgramPassages
-            ? `Open devotional program, ${programBadgeLabel} passages added`
-            : 'Open devotional program'
-        }
-        accessibilityHint="Review or share the passages you have gathered."
-      >
-        <View style={styles.iconButton}>
-          <Ionicons name="book-outline" size={22} color="#3b2a15" />
-          {badge}
-        </View>
-      </TouchableOpacity>
-    );
-  };
-  const RandomIconButton = ({ style }) => (
-    <TouchableOpacity
-      onPress={handleShowRandomPassage}
-      disabled={!hasPassages}
-      style={[
-        styles.homeActionButton,
-        style,
-        !hasPassages && styles.buttonDisabled,
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel="Read a random passage"
-      accessibilityHint="Opens a random passage from the library."
-    >
-      <View style={styles.iconButton}>
-        <Ionicons name="sparkles-outline" size={22} color="#3b2a15" />
-      </View>
-      <Text style={styles.homeActionLabel}>Read at Random</Text>
-    </TouchableOpacity>
-  );
-  const SettingsIconButton = ({ style }) => (
-    <TouchableOpacity
-      onPress={handleOpenSettings}
-      style={[styles.iconButtonContainer, style]}
-      accessibilityRole="button"
-      accessibilityLabel="Open settings"
-      accessibilityHint="Adjust reading preferences."
-    >
-      <View style={styles.iconButton}>
-        <Ionicons name="settings-outline" size={22} color="#3b2a15" />
-      </View>
-    </TouchableOpacity>
-  );
 
   const renderBlockContent = (block, index) => {
     if (block.type === 'heading') {
@@ -800,647 +807,223 @@ function AppContent() {
     );
   };
 
+  const displayName = authenticatedUser?.name ?? 'Kali';
+
   let screenContent = null;
 
-  if (currentScreen === 'home') {
-    screenContent = (
-      <View style={styles.homeContainer}>
-        <View style={styles.homeHeader}>
-          <View style={styles.homeHeaderTopRow}>
-            <Text style={styles.sectionTitle}>Baha'i Writings</Text>
-            <SettingsIconButton />
-          </View>
-          <View style={styles.homeHeaderActions}>
-            <ProgramIconButton
-              showLabel
-              style={styles.homeActionButtonSpacing}
-            />
-            <RandomIconButton />
-          </View>
-        </View>
-        <FlatList
-          data={writings}
-          keyExtractor={item => item.id}
-          style={styles.homeList}
-          contentContainerStyle={
-            writings.length === 0 ? styles.homeListEmpty : styles.homeListContent
-          }
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              onPress={() => handleSelectWriting(item.id)}
-              style={styles.homeCard}
-            >
-              <Text style={styles.homeCardTitle}>{item.title}</Text>
-              <Text style={styles.homeCardSubtitle}>Tap to explore this writing</Text>
-            </TouchableOpacity>
-          )}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                No writings available yet. Add XHTML files to `assets/writings`
-                and run `npm run process:writings` to generate the library.
-              </Text>
-            </View>
-          )}
+  switch (currentScreen) {
+    case 'home':
+      screenContent = (
+        <HomeScreen
+          styles={styles}
+          displayName={displayName}
+          onStartSignIn={handleStartSignIn}
+          onContinueAsGuest={handleContinueAsGuest}
         />
-      </View>
-    );
-  } else if (currentScreen === 'settings') {
-    screenContent = (
-      <View style={styles.screenSurface}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleCloseSettings}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>Back to home</Text>
-          </TouchableOpacity>
-          <ProgramIconButton />
-        </View>
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          Settings
-        </Text>
-        <Text
-          style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}
-        >
-          Adjust your reading experience.
-        </Text>
-        <View style={styles.settingsGroup}>
-          <Text style={styles.settingsGroupLabel}>Font size</Text>
-          {fontOptions.map(option => {
-            const isSelected = fontScale === option.value;
-            return (
-              <TouchableOpacity
-                key={option.id}
-                onPress={() => handleSelectFontScale(option.value)}
-                style={[
-                  styles.settingsOption,
-                  isSelected && styles.settingsOptionSelected,
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isSelected }}
-              >
-                <View style={styles.settingsOptionHeader}>
-                  <Text style={styles.settingsOptionLabel}>
-                    {option.label}
-                  </Text>
-                  {isSelected ? (
-                    <View style={styles.settingsOptionBadge}>
-                      <Text style={styles.settingsOptionBadgeLabel}>
-                        Selected
-                      </Text>
-                    </View>
-                  ) : null}
-                </View>
-                <Text style={styles.settingsOptionDescription}>
-                  {option.description}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-      </View>
-    );
-  } else if (currentScreen === 'share' && shareContext) {
-    screenContent = (
-      <View style={styles.screenSurface}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleCloseShare}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>{shareBackButtonLabel}</Text>
-          </TouchableOpacity>
-          <ProgramIconButton />
-        </View>
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          Share this passage
-        </Text>
-        <Text
-          style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}
-        >
-          Pick a layout and send this inspiration to someone you love.
-        </Text>
-        <View
-          style={[
-            styles.sharePreviewCard,
-            {
-              backgroundColor: activeShareTheme.backgroundColor,
-              borderColor: activeShareTheme.accentColor,
-            },
-          ]}
-        >
-          <View style={styles.sharePreviewContent}>
-            <Text
-              style={[
-                styles.sharePreviewQuote,
-                scaledTypography.contentParagraph,
-                { color: activeShareTheme.textColor },
-              ]}
-            >
-              {shareContext.block.text}
-            </Text>
-            <View style={styles.sharePreviewMeta}>
-              <Text
-                style={[
-                  styles.sharePreviewMetaLabel,
-                  { color: activeShareTheme.tagColor },
-                ]}
-              >
-                From
-              </Text>
-              <Text
-                style={[
-                  styles.sharePreviewTitle,
-                  { color: activeShareTheme.textColor },
-                ]}
-              >
-                {shareContext.writingTitle}
-              </Text>
-              {shareContext.sectionTitle ? (
-                <Text
-                  style={[
-                    styles.sharePreviewSection,
-                    { color: activeShareTheme.tagColor },
-                  ]}
-                >
-                  {shareContext.sectionTitle}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-        </View>
-        <View style={styles.shareThemeRow}>
-          {shareThemes.map(theme => {
-            const isActive = theme.id === shareThemeId;
-            return (
-              <TouchableOpacity
-                key={theme.id}
-                onPress={() => handleSelectShareTheme(theme.id)}
-                style={[
-                  styles.shareThemeChip,
-                  isActive && styles.shareThemeChipSelected,
-                  {
-                    borderColor: theme.accentColor,
-                    backgroundColor: isActive ? theme.backgroundColor : '#fff',
-                  },
-                ]}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-              >
-                <View
-                  style={[
-                    styles.shareThemeSwatch,
-                    { backgroundColor: theme.accentColor },
-                  ]}
-                />
-                <Text style={styles.shareThemeLabel}>{theme.name}</Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
-        <TouchableOpacity
-          onPress={handleShareNow}
-          style={styles.shareNowButton}
-        >
-          <Text style={styles.shareNowButtonLabel}>Share passage</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  } else if (currentScreen === 'program') {
-    screenContent = (
-      <View style={styles.screenSurface}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleCloseProgram}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>
-              {programBackButtonLabel}
-            </Text>
-          </TouchableOpacity>
-          {hasProgramPassages ? (
-            <TouchableOpacity
-              onPress={handleClearProgram}
-              style={styles.programClearButton}
-            >
-              <Text style={styles.programClearLabel}>Clear all</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          Devotional Program
-        </Text>
-        <Text
-          style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}
-        >
-          Gather passages into a single flow before you share.
-        </Text>
-        <FlatList
-          data={programPassages}
-          keyExtractor={item => item.id}
-          style={styles.programList}
-          contentContainerStyle={styles.programListContent}
-          renderItem={({ item, index }) => (
-            <View style={styles.passageCard}>
-              <View style={styles.programCardHeader}>
-                <View style={styles.programCardMeta}>
-                  <Text style={styles.programCardTitle}>
-                    {index + 1}. {item.writingTitle ?? 'Selected passage'}
-                  </Text>
-                  {item.sectionTitle ? (
-                    <Text style={styles.programCardSubtitle}>
-                      {item.sectionTitle}
-                    </Text>
-                  ) : null}
-                </View>
-                <TouchableOpacity
-                  onPress={() => handleRemoveFromProgram(item.id)}
-                  style={styles.programRemoveButton}
-                >
-                  <Text style={styles.programRemoveLabel}>Remove</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={styles.blockWrapper}>
-                {renderBlockContent(item.block, 0)}
-              </View>
-            </View>
-          )}
-          ListHeaderComponent={() => (
-            <View style={styles.programForm}>
-              <Text style={styles.programFormTitle}>Devotional details</Text>
-              <Text style={styles.programFormHint}>
-                Give this devotional a title and optional guidance. These
-                details are included when sending to Liquid Spirit.
-              </Text>
-              <Text style={styles.programInputLabel}>Title</Text>
-              <TextInput
-                value={programTitle}
-                onChangeText={text => {
-                  setProgramTitle(text);
-                  if (text.trim().length > 0) {
-                    setProgramSubmissionError(null);
-                    setProgramSubmissionSuccess(null);
-                  }
-                }}
-                placeholder="Sunrise Devotional"
-                style={styles.programTextInput}
-                placeholderTextColor="#b8a58b"
-                autoCapitalize="sentences"
-                autoCorrect
-              />
-              <Text style={styles.programInputLabel}>Notes (optional)</Text>
-              <TextInput
-                value={programNotes}
-                onChangeText={text => {
-                  setProgramNotes(text);
-                  setProgramSubmissionSuccess(null);
-                }}
-                placeholder="Add facilitation notes, music cues, or prayers."
-                style={[styles.programTextInput, styles.programTextArea]}
-                placeholderTextColor="#b8a58b"
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-          )}
-          ListFooterComponent={() => (
-            <View style={styles.programActions}>
-              <TouchableOpacity
-                onPress={handleShareProgram}
-                style={[
-                  styles.shareNowButton,
-                  styles.programActionButton,
-                  (!hasProgramPassages || isSubmittingProgram) &&
-                    styles.buttonDisabled,
-                ]}
-                disabled={!hasProgramPassages || isSubmittingProgram}
-              >
-                <Text style={styles.shareNowButtonLabel}>
-                  Share devotional program
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                onPress={handleSubmitProgram}
-                style={[
-                  styles.submitButton,
-                  styles.programActionButton,
-                  (!hasProgramPassages || isSubmittingProgram) &&
-                    styles.buttonDisabled,
-                ]}
-                disabled={!hasProgramPassages || isSubmittingProgram}
-              >
-                {isSubmittingProgram ? (
-                  <ActivityIndicator color="#ffffff" />
-                ) : (
-                  <Text style={styles.submitButtonLabel}>
-                    Submit to Liquid Spirit
-                  </Text>
-                )}
-              </TouchableOpacity>
-              {programSubmissionError ? (
-                <Text style={styles.programStatusError}>
-                  {programSubmissionError}
-                </Text>
-              ) : null}
-              {programSubmissionSuccess ? (
-                <Text style={styles.programStatusSuccess}>
-                  {programSubmissionSuccess}
-                </Text>
-              ) : null}
-            </View>
-          )}
-          ListEmptyComponent={() => (
-            <View style={styles.emptyState}>
-              <Text style={styles.emptyStateText}>
-                No passages added yet. Explore the library or daily passages and
-                tap "Add to program" to build your devotional.
-              </Text>
-            </View>
-          )}
+      );
+      break;
+    case 'signin':
+      screenContent = (
+        <SignInScreen
+          styles={styles}
+          authEmail={authEmail}
+          authPassword={authPassword}
+          authError={authError}
+          isAuthenticating={isAuthenticating}
+          onChangeEmail={setAuthEmail}
+          onChangePassword={setAuthPassword}
+          onSignIn={handleSignIn}
+          onCancel={handleCancelSignIn}
         />
-      </View>
-    );
-  } else if (currentScreen === 'writing' && selectedWriting) {
-    screenContent = (
-      <View style={styles.screenSurface}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleBackToHome}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>Back to library</Text>
-          </TouchableOpacity>
-          <ProgramIconButton />
-        </View>
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          {selectedWriting.title}
-        </Text>
-        <Text
-          style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}
-        >
-          Choose a section to read.
-        </Text>
-        {writingSections.length === 0 ? (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              This writing does not contain any readable sections yet.
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={writingSections}
-            keyExtractor={item => item.id}
-            style={styles.sectionList}
-            contentContainerStyle={styles.sectionListContent}
-            renderItem={({ item, index }) => {
-              const blockCount = item.blocks.length;
-              const blockLabel = blockCount === 1 ? 'passage' : 'passages';
-              return (
-                <TouchableOpacity
-                  onPress={() => handleSelectSection(item.id)}
-                  style={styles.sectionRow}
-                >
-                  <Text style={styles.sectionRowTitle}>
-                    {index + 1}. {item.title}
-                  </Text>
-                  <Text style={styles.sectionRowDescription}>
-                    {blockCount} {blockLabel}
-                  </Text>
-                </TouchableOpacity>
-              );
-            }}
+      );
+      break;
+    case 'library':
+      screenContent = (
+        <LibraryScreen
+          styles={styles}
+          writings={writings}
+          onSelectWriting={handleSelectWriting}
+          onOpenSettings={handleOpenSettings}
+          onOpenProgram={handleOpenProgram}
+          hasProgramPassages={hasProgramPassages}
+          programBadgeLabel={programBadgeLabel}
+          hasPassages={hasPassages}
+          onShowRandomPassage={handleShowRandomPassage}
+        />
+      );
+      break;
+    case 'settings':
+      screenContent = (
+        <SettingsScreen
+          styles={styles}
+          scaledTypography={scaledTypography}
+          onClose={handleCloseSettings}
+          onOpenProgram={handleOpenProgram}
+          hasProgramPassages={hasProgramPassages}
+          programBadgeLabel={programBadgeLabel}
+          fontOptions={fontOptions}
+          fontScale={fontScale}
+          onSelectFontScale={handleSelectFontScale}
+        />
+      );
+      break;
+    case 'share':
+      if (shareContext) {
+        screenContent = (
+          <ShareScreen
+            styles={styles}
+            scaledTypography={scaledTypography}
+            shareContext={shareContext}
+            shareBackButtonLabel={shareBackButtonLabel}
+            onClose={handleCloseShare}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            activeShareTheme={activeShareTheme}
+            shareThemes={shareThemes}
+            shareThemeId={shareThemeId}
+            onSelectShareTheme={handleSelectShareTheme}
+            onShareNow={handleShareNow}
           />
-        )}
-      </View>
-    );
-  } else if (
-    currentScreen === 'section' &&
-    selectedWriting &&
-    selectedSection
-  ) {
-    screenContent = (
-      <View style={[styles.screenSurface, styles.sectionScreenSurface]}>
-        <View style={styles.sectionHeader}>
-          <View style={styles.sectionHeaderTopRow}>
-            <TouchableOpacity
-              onPress={handleBackToSections}
-              style={styles.backButton}
-            >
-              <Text style={styles.backButtonLabel}>Back to sections</Text>
-            </TouchableOpacity>
-            <ProgramIconButton />
-          </View>
-          <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-            {selectedWriting.title}
-          </Text>
-          <Text
-            style={[
-              styles.sectionDetailTitle,
-              scaledTypography.sectionDetailTitle,
-            ]}
-          >
-            {selectedSection.title}
-          </Text>
-        </View>
-        {selectedSection.blocks.length === 0 ? (
-          <Text
-            style={[
-              styles.contentParagraph,
-              styles.sectionEmptyText,
-              scaledTypography.contentParagraph,
-            ]}
-          >
-            This section does not contain any readable text.
-          </Text>
-        ) : (
-          <>
-            <View style={styles.sectionPagerIndicator}>
-              <Text style={styles.sectionPagerIndicatorLabel}>
-                Passage {sectionBlockIndex + 1} of {selectedSection.blocks.length}
-              </Text>
-            </View>
-            <View style={styles.sectionPagerWrapper}>
-              <FlatList
-                ref={sectionPagerRef}
-                data={selectedSection.blocks}
-                horizontal
-                pagingEnabled
-                decelerationRate="fast"
-                snapToAlignment="start"
-                snapToInterval={sectionPageWidth}
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item, index) => `${selectedSection.id}-${item.id ?? index}`}
-                style={styles.sectionPagerList}
-                contentContainerStyle={styles.sectionPagerContent}
-                onViewableItemsChanged={sectionViewableItemsChanged.current}
-                viewabilityConfig={sectionViewabilityConfig.current}
-                getItemLayout={(_, index) => ({
-                  length: sectionPageWidth,
-                  offset: sectionPageWidth * index,
-                  index,
-                })}
-                renderItem={({ item, index }) => (
-                  <View
-                    style={[
-                      styles.sectionPagerItem,
-                      { width: sectionPageWidth },
-                    ]}
-                  >
-                    <ScrollView
-                      style={styles.sectionPagerScrollView}
-                      contentContainerStyle={styles.sectionPagerScroll}
-                      showsVerticalScrollIndicator={false}
-                      nestedScrollEnabled
-                    >
-                      <View style={styles.sectionPagerBlock}>
-                        {renderBlockContent(item, index)}
-                      </View>
-                    </ScrollView>
-                    <View
-                      style={[styles.sectionPagerFooter, styles.actionChipRow]}
-                    >
-                      <TouchableOpacity
-                        onPress={() =>
-                          handleAddToProgram({
-                            block: item,
-                            writingId: selectedWriting.id,
-                            writingTitle: selectedWriting.title,
-                            sectionId: selectedSection.id,
-                            sectionTitle: selectedSection.title,
-                          })
-                        }
-                        style={[styles.shareActionChip, styles.chipInRow]}
-                      >
-                        <Text style={styles.shareActionChipLabel}>
-                          Add to program
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        onPress={() =>
-                          handleOpenShare({
-                            block: item,
-                            writingTitle: selectedWriting.title,
-                            sectionTitle: selectedSection.title,
-                            returnScreen: 'section',
-                          })
-                        }
-                        style={[
-                          styles.shareActionChip,
-                          styles.chipInRow,
-                          styles.chipSpacing,
-                        ]}
-                      >
-                        <Text style={styles.shareActionChipLabel}>Share</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              />
-            </View>
-          </>
-        )}
-      </View>
-    );
-  } else if (currentScreen === 'passage' && randomPassage) {
-    screenContent = (
-      <View style={styles.screenSurface}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleBackToHome}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>Back to library</Text>
-          </TouchableOpacity>
-          <ProgramIconButton />
-        </View>
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          Daily Passage
-        </Text>
-        <View style={styles.passageMeta}>
-          <Text style={styles.passageMetaLabel}>From</Text>
-          <Text
-            style={[
-              styles.passageMetaWriting,
-              scaledTypography.passageMetaWriting,
-            ]}
-          >
-            {randomPassage.writingTitle}
-          </Text>
-          <Text
-            style={[
-              styles.passageMetaSection,
-              scaledTypography.passageMetaSection,
-            ]}
-          >
-            {randomPassage.sectionTitle}
-          </Text>
-        </View>
-        <ScrollView contentContainerStyle={styles.contentScroll}>
-          <View style={styles.passageCard}>
-            <View style={styles.blockWrapper}>
-              {renderBlockContent(randomPassage.block, 0)}
-              <View style={styles.actionChipRow}>
-                <TouchableOpacity
-                  onPress={() =>
-                    handleAddToProgram({
-                      block: randomPassage.block,
-                      writingId: randomPassage.writingId,
-                      writingTitle: randomPassage.writingTitle,
-                      sectionId: randomPassage.sectionId,
-                      sectionTitle: randomPassage.sectionTitle,
-                    })
-                  }
-                  style={[styles.shareActionChip, styles.chipInRow]}
-                >
-                  <Text style={styles.shareActionChipLabel}>Add to program</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() =>
-                    handleOpenShare({
-                      block: randomPassage.block,
-                      writingTitle: randomPassage.writingTitle,
-                      sectionTitle: randomPassage.sectionTitle,
-                      returnScreen: 'passage',
-                    })
-                  }
-                  style={[styles.shareActionChip, styles.chipInRow, styles.chipSpacing]}
-                >
-                  <Text style={styles.shareActionChipLabel}>Share</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </View>
-        </ScrollView>
-        <TouchableOpacity
-          onPress={handleShowRandomPassage}
-          style={styles.secondaryButton}
-        >
-          <Text style={styles.secondaryButtonLabel}>Show another passage</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  } else {
-    screenContent = (
-      <View style={styles.screenSurface}>
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={handleBackToHome}
-            style={styles.backButton}
-          >
-            <Text style={styles.backButtonLabel}>Back to library</Text>
-          </TouchableOpacity>
-          <ProgramIconButton />
-        </View>
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>
-            The selected content is not available.
-          </Text>
-        </View>
-      </View>
-    );
+        );
+      } else {
+        screenContent = (
+          <UnavailableScreen
+            styles={styles}
+            onBack={handleBackToHome}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      }
+      break;
+    case 'program':
+      screenContent = (
+        <ProgramScreen
+          styles={styles}
+          scaledTypography={scaledTypography}
+          programPassages={programPassages}
+          programBackButtonLabel={programBackButtonLabel}
+          hasProgramPassages={hasProgramPassages}
+          onClose={handleCloseProgram}
+          onClearProgram={handleClearProgram}
+          renderBlockContent={renderBlockContent}
+          programTitle={programTitle}
+          onChangeProgramTitle={handleProgramTitleChange}
+          programNotes={programNotes}
+          onChangeProgramNotes={handleProgramNotesChange}
+          onShareProgram={handleShareProgram}
+          onSubmitProgram={handleSubmitProgram}
+          programSubmissionError={programSubmissionError}
+          programSubmissionSuccess={programSubmissionSuccess}
+          isSubmittingProgram={isSubmittingProgram}
+          onRemoveFromProgram={handleRemoveFromProgram}
+        />
+      );
+      break;
+    case 'writing':
+      if (selectedWriting) {
+        screenContent = (
+          <WritingScreen
+            styles={styles}
+            scaledTypography={scaledTypography}
+            selectedWriting={selectedWriting}
+            writingSections={writingSections}
+            onBack={handleBackToHome}
+            onSelectSection={handleSelectSection}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      } else {
+        screenContent = (
+          <UnavailableScreen
+            styles={styles}
+            onBack={handleBackToHome}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      }
+      break;
+    case 'section':
+      if (selectedWriting && selectedSection) {
+        screenContent = (
+          <SectionScreen
+            styles={styles}
+            scaledTypography={scaledTypography}
+            selectedWriting={selectedWriting}
+            selectedSection={selectedSection}
+            sectionBlockIndex={sectionBlockIndex}
+            onBack={handleBackToSections}
+            sectionPagerRef={sectionPagerRef}
+            sectionPageWidth={sectionPageWidth}
+            sectionViewabilityConfig={sectionViewabilityConfig}
+            sectionViewableItemsChanged={sectionViewableItemsChanged}
+            renderBlockContent={renderBlockContent}
+            onAddToProgram={handleAddToProgram}
+            onShare={handleOpenShare}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      } else {
+        screenContent = (
+          <UnavailableScreen
+            styles={styles}
+            onBack={handleBackToHome}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      }
+      break;
+    case 'passage':
+      if (randomPassage) {
+        screenContent = (
+          <PassageScreen
+            styles={styles}
+            scaledTypography={scaledTypography}
+            randomPassage={randomPassage}
+            onBack={handleBackToHome}
+            renderBlockContent={renderBlockContent}
+            onAddToProgram={handleAddToProgram}
+            onShare={handleOpenShare}
+            onShowAnother={handleShowRandomPassage}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      } else {
+        screenContent = (
+          <UnavailableScreen
+            styles={styles}
+            onBack={handleBackToHome}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      }
+      break;
+    default:
+      screenContent = (
+        <UnavailableScreen
+          styles={styles}
+          onBack={handleBackToHome}
+          onOpenProgram={handleOpenProgram}
+          hasProgramPassages={hasProgramPassages}
+          programBadgeLabel={programBadgeLabel}
+        />
+      );
+      break;
   }
-
   return (
     <View
       style={[
@@ -1462,6 +1045,105 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f4ef',
+  },
+  authContainer: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    justifyContent: 'center',
+  },
+  authIntro: {
+    marginBottom: 36,
+  },
+  authGreeting: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#6f5a35',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  authName: {
+    fontSize: 42,
+    fontWeight: '700',
+    color: '#2c1f0c',
+    marginTop: 8,
+  },
+  authSubtitle: {
+    fontSize: 16,
+    color: '#6f5a35',
+    lineHeight: 24,
+    marginTop: 12,
+  },
+  authActions: {
+    flexDirection: 'column',
+    marginTop: 12,
+  },
+  authPrimaryButton: {
+    borderRadius: 18,
+    backgroundColor: '#3b2a15',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
+  authPrimaryButtonDisabled: {
+    opacity: 0.7,
+  },
+  authPrimaryButtonLabel: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  authSecondaryButton: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f7f0e3',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  authSecondaryButtonLabel: {
+    color: '#3b2a15',
+    fontSize: 16,
+    fontWeight: '600',
+    letterSpacing: 0.2,
+  },
+  authFormContainer: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingBottom: 24,
+  },
+  authFormTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#2c1f0c',
+    marginBottom: 8,
+  },
+  authFormSubtitle: {
+    fontSize: 14,
+    color: '#6f5a35',
+    lineHeight: 20,
+    marginBottom: 20,
+  },
+  authErrorText: {
+    fontSize: 14,
+    color: '#9b2c2c',
+    marginBottom: 12,
+  },
+  authInput: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 14,
+    backgroundColor: '#fffdf8',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#2c1f0c',
+    marginBottom: 12,
   },
   homeContainer: {
     flex: 1,
