@@ -1534,6 +1534,13 @@ const styles = StyleSheet.create({
     borderColor: '#d7c5a8',
     backgroundColor: '#f0e4d2',
   },
+  backButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  backButtonIcon: {
+    marginRight: 6,
+  },
   backButtonLabel: {
     fontSize: 15,
     fontWeight: '500',
