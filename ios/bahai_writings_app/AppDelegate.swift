@@ -24,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window = UIWindow(frame: UIScreen.main.bounds)
 
     factory.startReactNative(
-      withModuleName: "bahai_writings_app",
+      withModuleName: "Kali",
       in: window,
       launchOptions: launchOptions
     )
