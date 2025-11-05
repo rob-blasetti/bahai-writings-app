@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
+  PanResponder,
   ScrollView,
   Text,
   TouchableOpacity,
   View,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
 
 export default function PassageScreen({
@@ -20,15 +22,43 @@ export default function PassageScreen({
   hasProgramPassages,
   programBadgeLabel,
 }) {
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const { dx, dy } = gestureState;
+          const isHorizontalSwipe =
+            Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
+          return isHorizontalSwipe;
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const { dx, vx } = gestureState;
+          const shouldGoBack = dx > 80 || vx > 0.6;
+          if (shouldGoBack) {
+            onBack();
+          }
+        },
+      }),
+    [onBack],
+  );
+
   if (!randomPassage) {
     return null;
   }
 
   return (
-    <View style={styles.screenSurface}>
+    <View style={styles.screenSurface} {...panResponder.panHandlers}>
       <View style={styles.topBar}>
         <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>Back to library</Text>
+          <View style={styles.backButtonContent}>
+            <Ionicons
+              name="chevron-back"
+              size={18}
+              color="#3b2a15"
+              style={styles.backButtonIcon}
+            />
+            <Text style={styles.backButtonLabel}>Back</Text>
+          </View>
         </TouchableOpacity>
         <ProgramIconButton
           styles={styles}
