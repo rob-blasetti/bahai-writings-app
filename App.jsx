@@ -1,21 +1,29 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
+  Dimensions,
   FlatList,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   useColorScheme,
   View,
-  Share,
-  Dimensions,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import writingsManifest from './assets/generated/writings.json';
+
+const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
+  global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
+  'https://liquidspirit.example.com/api/devotionals';
 
 function cleanBlockText(block) {
   const normalized = block
@@ -246,6 +254,11 @@ function AppContent() {
   const [shareContext, setShareContext] = useState(null);
   const [programPassages, setProgramPassages] = useState([]);
   const [programReturnScreen, setProgramReturnScreen] = useState(null);
+  const [programTitle, setProgramTitle] = useState('');
+  const [programNotes, setProgramNotes] = useState('');
+  const [isSubmittingProgram, setIsSubmittingProgram] = useState(false);
+  const [programSubmissionError, setProgramSubmissionError] = useState(null);
+  const [programSubmissionSuccess, setProgramSubmissionSuccess] = useState(null);
   const [sectionBlockIndex, setSectionBlockIndex] = useState(0);
   const sectionPagerRef = useRef(null);
   const sectionViewabilityConfig = useRef({
@@ -301,12 +314,6 @@ function AppContent() {
     [writings],
   );
   const programCount = programPassages.length;
-  const programButtonLabel = useMemo(() => {
-    if (programCount === 0) {
-      return 'Devotional program';
-    }
-    return `Devotional program (${programCount})`;
-  }, [programCount]);
   const hasProgramPassages = programCount > 0;
   const programBackButtonLabel = useMemo(() => {
     if (programReturnScreen === 'share') {
@@ -462,6 +469,8 @@ function AppContent() {
       }
       return [...previous, programItem];
     });
+    setProgramSubmissionError(null);
+    setProgramSubmissionSuccess(null);
   };
 
   const handleOpenProgram = () => {
@@ -486,6 +495,8 @@ function AppContent() {
 
   const handleClearProgram = () => {
     setProgramPassages([]);
+    setProgramSubmissionError(null);
+    setProgramSubmissionSuccess(null);
   };
 
   const handleShareProgram = async () => {
@@ -508,6 +519,91 @@ function AppContent() {
       await Share.share({ message });
     } catch (error) {
       console.warn('Unable to share devotional program', error);
+    }
+  };
+
+  const handleSubmitProgram = async () => {
+    if (programPassages.length === 0) {
+      return;
+    }
+
+    const trimmedTitle = programTitle.trim();
+    if (trimmedTitle.length === 0) {
+      setProgramSubmissionError('Please add a devotional title before submitting.');
+      setProgramSubmissionSuccess(null);
+      return;
+    }
+
+    if (!LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT) {
+      setProgramSubmissionError(
+        'Liquid Spirit endpoint is not configured. Update LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT.',
+      );
+      setProgramSubmissionSuccess(null);
+      return;
+    }
+
+    setIsSubmittingProgram(true);
+    setProgramSubmissionError(null);
+    setProgramSubmissionSuccess(null);
+
+    const payload = {
+      title: trimmedTitle,
+      notes: programNotes.trim(),
+      passages: programPassages.map(item => ({
+        blockId: item.block.id,
+        text: item.block.text,
+        type: item.block.type,
+        writingId: item.writingId,
+        writingTitle: item.writingTitle,
+        sectionId: item.sectionId,
+        sectionTitle: item.sectionTitle,
+        sourceId: item.block.sourceId,
+      })),
+    };
+
+    try {
+      const response = await fetch(LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(
+          errorText || `Request failed with status ${response.status}`,
+        );
+      }
+
+      let responseBody = null;
+      try {
+        responseBody = await response.json();
+      } catch (parseError) {
+        responseBody = null;
+      }
+
+      setProgramSubmissionSuccess(
+        responseBody?.message ??
+          'Devotional submitted to Liquid Spirit. Look for it on the activities dashboard.',
+      );
+      setProgramTitle('');
+      setProgramNotes('');
+      setProgramPassages([]);
+      Alert.alert(
+        'Devotional submitted',
+        'Your devotional program has been sent to Liquid Spirit for review.',
+      );
+    } catch (error) {
+      console.warn('Unable to submit devotional program', error);
+      setProgramSubmissionError(
+        error?.message ??
+          'Unable to submit devotional program. Please try again in a moment.',
+      );
+    } finally {
+      setIsSubmittingProgram(false);
     }
   };
 
@@ -546,6 +642,87 @@ function AppContent() {
   );
 
   const hasPassages = availablePassages.length > 0;
+  const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
+  const ProgramIconButton = ({ style, showLabel = false }) => {
+    const badge = hasProgramPassages ? (
+      <View style={styles.iconBadge}>
+        <Text style={styles.iconBadgeLabel}>{programBadgeLabel}</Text>
+      </View>
+    ) : null;
+
+    if (showLabel) {
+      return (
+        <TouchableOpacity
+          onPress={handleOpenProgram}
+          style={[styles.homeActionButton, style]}
+          accessibilityRole="button"
+          accessibilityLabel={
+            hasProgramPassages
+              ? `Open devotional program, ${programBadgeLabel} passages added`
+              : 'Open devotional program'
+          }
+          accessibilityHint="Review or share the passages you have gathered."
+        >
+          <View style={styles.iconButton}>
+            <Ionicons name="book-outline" size={22} color="#3b2a15" />
+            {badge}
+          </View>
+          <Text style={styles.homeActionLabel}>Create Devotional</Text>
+        </TouchableOpacity>
+      );
+    }
+
+    return (
+      <TouchableOpacity
+        onPress={handleOpenProgram}
+        style={[styles.iconButtonContainer, style]}
+        accessibilityRole="button"
+        accessibilityLabel={
+          hasProgramPassages
+            ? `Open devotional program, ${programBadgeLabel} passages added`
+            : 'Open devotional program'
+        }
+        accessibilityHint="Review or share the passages you have gathered."
+      >
+        <View style={styles.iconButton}>
+          <Ionicons name="book-outline" size={22} color="#3b2a15" />
+          {badge}
+        </View>
+      </TouchableOpacity>
+    );
+  };
+  const RandomIconButton = ({ style }) => (
+    <TouchableOpacity
+      onPress={handleShowRandomPassage}
+      disabled={!hasPassages}
+      style={[
+        styles.homeActionButton,
+        style,
+        !hasPassages && styles.buttonDisabled,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel="Read a random passage"
+      accessibilityHint="Opens a random passage from the library."
+    >
+      <View style={styles.iconButton}>
+        <Ionicons name="sparkles-outline" size={22} color="#3b2a15" />
+      </View>
+      <Text style={styles.homeActionLabel}>Read at Random</Text>
+    </TouchableOpacity>
+  );
+  const SettingsIconButton = ({ style }) => (
+    <TouchableOpacity
+      onPress={handleOpenSettings}
+      style={[styles.iconButtonContainer, style]}
+      accessibilityRole="button"
+      accessibilityLabel="Open settings"
+      accessibilityHint="Adjust reading preferences."
+    >
+      <View style={styles.iconButton}>
+        <Ionicons name="settings-outline" size={22} color="#3b2a15" />
+      </View>
+    </TouchableOpacity>
+  );
 
   const renderBlockContent = (block, index) => {
     if (block.type === 'heading') {
@@ -629,37 +806,18 @@ function AppContent() {
     screenContent = (
       <View style={styles.homeContainer}>
         <View style={styles.homeHeader}>
-          <Text style={styles.sectionTitle}>Baha'i Writings</Text>
+          <View style={styles.homeHeaderTopRow}>
+            <Text style={styles.sectionTitle}>Baha'i Writings</Text>
+            <SettingsIconButton />
+          </View>
           <View style={styles.homeHeaderActions}>
-            <TouchableOpacity
-              onPress={handleOpenProgram}
-              style={[styles.programButton, styles.programButtonHome]}
-            >
-              <Text style={styles.programButtonLabel}>
-                {programButtonLabel}
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleOpenSettings}
-              style={styles.settingsButton}
-            >
-              <Text style={styles.settingsButtonLabel}>Settings</Text>
-            </TouchableOpacity>
+            <ProgramIconButton
+              showLabel
+              style={styles.homeActionButtonSpacing}
+            />
+            <RandomIconButton />
           </View>
         </View>
-        <TouchableOpacity
-          onPress={handleShowRandomPassage}
-          disabled={!hasPassages}
-          style={[
-            styles.randomButton,
-            !hasPassages && styles.randomButtonDisabled,
-          ]}
-        >
-          <Text style={styles.randomButtonLabel}>Read a random passage</Text>
-          <Text style={styles.randomButtonHint}>
-            A gentle prompt for your morning or evening devotion
-          </Text>
-        </TouchableOpacity>
         <FlatList
           data={writings}
           keyExtractor={item => item.id}
@@ -697,14 +855,7 @@ function AppContent() {
           >
             <Text style={styles.backButtonLabel}>Back to home</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleOpenProgram}
-            style={styles.programButton}
-          >
-            <Text style={styles.programButtonLabel}>
-              {programButtonLabel}
-            </Text>
-          </TouchableOpacity>
+          <ProgramIconButton />
         </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Settings
@@ -760,14 +911,7 @@ function AppContent() {
           >
             <Text style={styles.backButtonLabel}>{shareBackButtonLabel}</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleOpenProgram}
-            style={styles.programButton}
-          >
-            <Text style={styles.programButtonLabel}>
-              {programButtonLabel}
-            </Text>
-          </TouchableOpacity>
+          <ProgramIconButton />
         </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Share this passage
@@ -892,58 +1036,129 @@ function AppContent() {
         >
           Gather passages into a single flow before you share.
         </Text>
-        {hasProgramPassages ? (
-          <FlatList
-            data={programPassages}
-            keyExtractor={item => item.id}
-            style={styles.programList}
-            contentContainerStyle={styles.programListContent}
-            renderItem={({ item, index }) => (
-              <View style={styles.passageCard}>
-                <View style={styles.programCardHeader}>
-                  <View style={styles.programCardMeta}>
-                    <Text style={styles.programCardTitle}>
-                      {index + 1}. {item.writingTitle ?? 'Selected passage'}
-                    </Text>
-                    {item.sectionTitle ? (
-                      <Text style={styles.programCardSubtitle}>
-                        {item.sectionTitle}
-                      </Text>
-                    ) : null}
-                  </View>
-                  <TouchableOpacity
-                    onPress={() => handleRemoveFromProgram(item.id)}
-                    style={styles.programRemoveButton}
-                  >
-                    <Text style={styles.programRemoveLabel}>Remove</Text>
-                  </TouchableOpacity>
-                </View>
-                <View style={styles.blockWrapper}>
-                  {renderBlockContent(item.block, 0)}
-                </View>
-              </View>
-            )}
-            ListFooterComponent={() => (
-              <View style={styles.programShareFooter}>
-                <TouchableOpacity
-                  onPress={handleShareProgram}
-                  style={styles.shareNowButton}
-                >
-                  <Text style={styles.shareNowButtonLabel}>
-                    Share devotional program
+        <FlatList
+          data={programPassages}
+          keyExtractor={item => item.id}
+          style={styles.programList}
+          contentContainerStyle={styles.programListContent}
+          renderItem={({ item, index }) => (
+            <View style={styles.passageCard}>
+              <View style={styles.programCardHeader}>
+                <View style={styles.programCardMeta}>
+                  <Text style={styles.programCardTitle}>
+                    {index + 1}. {item.writingTitle ?? 'Selected passage'}
                   </Text>
+                  {item.sectionTitle ? (
+                    <Text style={styles.programCardSubtitle}>
+                      {item.sectionTitle}
+                    </Text>
+                  ) : null}
+                </View>
+                <TouchableOpacity
+                  onPress={() => handleRemoveFromProgram(item.id)}
+                  style={styles.programRemoveButton}
+                >
+                  <Text style={styles.programRemoveLabel}>Remove</Text>
                 </TouchableOpacity>
               </View>
-            )}
-          />
-        ) : (
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>
-              No passages added yet. Explore the library or daily passages and
-              tap "Add to program" to build your devotional.
-            </Text>
-          </View>
-        )}
+              <View style={styles.blockWrapper}>
+                {renderBlockContent(item.block, 0)}
+              </View>
+            </View>
+          )}
+          ListHeaderComponent={() => (
+            <View style={styles.programForm}>
+              <Text style={styles.programFormTitle}>Devotional details</Text>
+              <Text style={styles.programFormHint}>
+                Give this devotional a title and optional guidance. These
+                details are included when sending to Liquid Spirit.
+              </Text>
+              <Text style={styles.programInputLabel}>Title</Text>
+              <TextInput
+                value={programTitle}
+                onChangeText={text => {
+                  setProgramTitle(text);
+                  if (text.trim().length > 0) {
+                    setProgramSubmissionError(null);
+                    setProgramSubmissionSuccess(null);
+                  }
+                }}
+                placeholder="Sunrise Devotional"
+                style={styles.programTextInput}
+                placeholderTextColor="#b8a58b"
+                autoCapitalize="sentences"
+                autoCorrect
+              />
+              <Text style={styles.programInputLabel}>Notes (optional)</Text>
+              <TextInput
+                value={programNotes}
+                onChangeText={text => {
+                  setProgramNotes(text);
+                  setProgramSubmissionSuccess(null);
+                }}
+                placeholder="Add facilitation notes, music cues, or prayers."
+                style={[styles.programTextInput, styles.programTextArea]}
+                placeholderTextColor="#b8a58b"
+                multiline
+                textAlignVertical="top"
+              />
+            </View>
+          )}
+          ListFooterComponent={() => (
+            <View style={styles.programActions}>
+              <TouchableOpacity
+                onPress={handleShareProgram}
+                style={[
+                  styles.shareNowButton,
+                  styles.programActionButton,
+                  (!hasProgramPassages || isSubmittingProgram) &&
+                    styles.buttonDisabled,
+                ]}
+                disabled={!hasProgramPassages || isSubmittingProgram}
+              >
+                <Text style={styles.shareNowButtonLabel}>
+                  Share devotional program
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSubmitProgram}
+                style={[
+                  styles.submitButton,
+                  styles.programActionButton,
+                  (!hasProgramPassages || isSubmittingProgram) &&
+                    styles.buttonDisabled,
+                ]}
+                disabled={!hasProgramPassages || isSubmittingProgram}
+              >
+                {isSubmittingProgram ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text style={styles.submitButtonLabel}>
+                    Submit to Liquid Spirit
+                  </Text>
+                )}
+              </TouchableOpacity>
+              {programSubmissionError ? (
+                <Text style={styles.programStatusError}>
+                  {programSubmissionError}
+                </Text>
+              ) : null}
+              {programSubmissionSuccess ? (
+                <Text style={styles.programStatusSuccess}>
+                  {programSubmissionSuccess}
+                </Text>
+              ) : null}
+            </View>
+          )}
+          ListEmptyComponent={() => (
+            <View style={styles.emptyState}>
+              <Text style={styles.emptyStateText}>
+                No passages added yet. Explore the library or daily passages and
+                tap "Add to program" to build your devotional.
+              </Text>
+            </View>
+          )}
+        />
       </View>
     );
   } else if (currentScreen === 'writing' && selectedWriting) {
@@ -956,14 +1171,7 @@ function AppContent() {
           >
             <Text style={styles.backButtonLabel}>Back to library</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleOpenProgram}
-            style={styles.programButton}
-          >
-            <Text style={styles.programButtonLabel}>
-              {programButtonLabel}
-            </Text>
-          </TouchableOpacity>
+          <ProgramIconButton />
         </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           {selectedWriting.title}
@@ -1021,14 +1229,7 @@ function AppContent() {
             >
               <Text style={styles.backButtonLabel}>Back to sections</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              onPress={handleOpenProgram}
-              style={styles.programButton}
-            >
-              <Text style={styles.programButtonLabel}>
-                {programButtonLabel}
-              </Text>
-            </TouchableOpacity>
+            <ProgramIconButton />
           </View>
           <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
             {selectedWriting.title}
@@ -1151,14 +1352,7 @@ function AppContent() {
           >
             <Text style={styles.backButtonLabel}>Back to library</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleOpenProgram}
-            style={styles.programButton}
-          >
-            <Text style={styles.programButtonLabel}>
-              {programButtonLabel}
-            </Text>
-          </TouchableOpacity>
+          <ProgramIconButton />
         </View>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Daily Passage
@@ -1236,14 +1430,7 @@ function AppContent() {
           >
             <Text style={styles.backButtonLabel}>Back to library</Text>
           </TouchableOpacity>
-          <TouchableOpacity
-            onPress={handleOpenProgram}
-            style={styles.programButton}
-          >
-            <Text style={styles.programButtonLabel}>
-              {programButtonLabel}
-            </Text>
-          </TouchableOpacity>
+          <ProgramIconButton />
         </View>
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>
@@ -1282,50 +1469,76 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   homeHeader: {
+    marginBottom: 20,
+  },
+  homeHeaderTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
   homeHeaderActions: {
     flexDirection: 'row',
+    alignItems: 'flex-start',
+    flexWrap: 'wrap',
+    marginTop: 12,
+  },
+  iconButtonContainer: {
+    marginLeft: 12,
     alignItems: 'center',
   },
-  programButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+  iconButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     borderWidth: 1,
     borderColor: '#d7c5a8',
     backgroundColor: '#f7f0e3',
-    marginLeft: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  programButtonHome: {
-    marginLeft: 0,
-    marginRight: 8,
+  homeActionButton: {
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f7f0e3',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 18,
+    marginBottom: 12,
   },
-  programButtonLabel: {
-    fontSize: 14,
+  homeActionButtonSpacing: {
+    marginRight: 12,
+  },
+  homeActionLabel: {
+    marginTop: 8,
+    fontSize: 13,
     fontWeight: '600',
     color: '#3b2a15',
+    textAlign: 'center',
+    lineHeight: 18,
+  },
+  iconBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    minWidth: 18,
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 9,
+    backgroundColor: '#c86148',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconBadgeLabel: {
+    color: '#ffffff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   sectionTitle: {
     fontSize: 22,
     fontWeight: '700',
-    marginBottom: 16,
+    marginBottom: 0,
     color: '#2c1f0c',
-  },
-  settingsButton: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#d7c5a8',
-    backgroundColor: '#f0e4d2',
-  },
-  settingsButtonLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#3b2a15',
   },
   homeList: {
     flex: 1,
@@ -1338,28 +1551,6 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  randomButton: {
-    paddingVertical: 16,
-    paddingHorizontal: 18,
-    borderRadius: 18,
-    backgroundColor: '#c6a87d',
-    borderWidth: 1,
-    borderColor: '#b18d5c',
-    marginTop: 8,
-  },
-  randomButtonDisabled: {
-    opacity: 0.5,
-  },
-  randomButtonLabel: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#ffffff',
-  },
-  randomButtonHint: {
-    fontSize: 14,
-    color: '#f2e6d4',
-    marginTop: 6,
   },
   homeCard: {
     paddingVertical: 16,
@@ -1487,6 +1678,41 @@ const styles = StyleSheet.create({
   programListContent: {
     paddingBottom: 32,
   },
+  programForm: {
+    paddingHorizontal: 4,
+    paddingBottom: 24,
+  },
+  programFormTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2c1f0c',
+    marginBottom: 8,
+  },
+  programFormHint: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginBottom: 16,
+  },
+  programInputLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b2a15',
+    marginBottom: 6,
+  },
+  programTextInput: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#fffaf3',
+    fontSize: 16,
+    color: '#3b2a15',
+    marginBottom: 16,
+  },
+  programTextArea: {
+    minHeight: 96,
+  },
   programCardHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1522,10 +1748,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
-  programShareFooter: {
-    paddingVertical: 24,
-    alignItems: 'center',
-  },
   programClearButton: {
     paddingVertical: 6,
     paddingHorizontal: 12,
@@ -1540,6 +1762,44 @@ const styles = StyleSheet.create({
     color: '#3b2a15',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  programActions: {
+    paddingVertical: 24,
+    alignItems: 'stretch',
+  },
+  programActionButton: {
+    alignSelf: 'stretch',
+    marginBottom: 16,
+  },
+  submitButton: {
+    alignSelf: 'stretch',
+    paddingVertical: 14,
+    paddingHorizontal: 32,
+    borderRadius: 18,
+    backgroundColor: '#6d9c7c',
+    borderWidth: 1,
+    borderColor: '#598467',
+    alignItems: 'center',
+  },
+  submitButtonLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  programStatusError: {
+    fontSize: 14,
+    color: '#b04b3c',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  programStatusSuccess: {
+    fontSize: 14,
+    color: '#3a7a5a',
+    textAlign: 'center',
+    marginTop: 4,
   },
   secondaryButton: {
     alignSelf: 'center',
