@@ -19,16 +19,19 @@ import HomeScreen from './screens/HomeScreen';
 import SignInScreen from './screens/SignInScreen';
 import LibraryScreen from './screens/LibraryScreen';
 import SettingsScreen from './screens/SettingsScreen';
-import ShareScreen from './screens/ShareScreen';
+import ShareSelectionScreen from './screens/ShareSelectionScreen';
+import ShareEditorScreen from './screens/ShareEditorScreen';
 import ProgramScreen from './screens/ProgramScreen';
 import WritingScreen from './screens/WritingScreen';
 import SectionScreen from './screens/SectionScreen';
 import PassageScreen from './screens/PassageScreen';
 import UnavailableScreen from './screens/UnavailableScreen';
+import { extractPassageSentences } from './screens/shareUtils';
 
 const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
   'https://liquidspirit.example.com/api/devotionals';
+const SHARE_SELECTION_LIMIT = 2;
 
 function cleanBlockText(block) {
   const normalized = block
@@ -301,6 +304,7 @@ function AppContent() {
     [shareThemeId, shareThemes],
   );
   const [shareContext, setShareContext] = useState(null);
+  const [shareSelectedSentenceIndexes, setShareSelectedSentenceIndexes] = useState([]);
   const [programPassages, setProgramPassages] = useState([]);
   const [programReturnScreen, setProgramReturnScreen] = useState(null);
   const [programTitle, setProgramTitle] = useState('');
@@ -448,13 +452,25 @@ function AppContent() {
     if (!block) {
       return;
     }
+    const baseText =
+      typeof block?.text === 'string' && block.text.trim().length > 0
+        ? block.text
+        : block?.shareText ?? '';
+    const sentences = extractPassageSentences(baseText);
+    const defaultSelection = sentences.length === 0
+      ? []
+      : sentences.length === 1
+      ? [0]
+      : [0, 1].filter(index => index < sentences.length);
+
     setShareContext({
       block,
       writingTitle,
       sectionTitle,
       returnScreen,
     });
-    setCurrentScreen('share');
+    setShareSelectedSentenceIndexes(defaultSelection);
+    setCurrentScreen('shareSelect');
   };
 
   const handleContinueAsGuest = () => {
@@ -520,6 +536,7 @@ function AppContent() {
 
   const handleCloseShare = () => {
     const nextScreen = shareContext?.returnScreen ?? 'library';
+    setShareSelectedSentenceIndexes([]);
     setShareContext(null);
     setCurrentScreen(nextScreen);
   };
@@ -531,16 +548,61 @@ function AppContent() {
 
     const { block, writingTitle, sectionTitle } = shareContext;
     const sectionLine = sectionTitle ? `, ${sectionTitle}` : '';
-    const fallbackShareText = block?.shareText ?? block?.text ?? '';
-    const blockText =
-      cleanBlockText(fallbackShareText) || fallbackShareText || '';
-    const message = `"${blockText}"\n\n— ${writingTitle}${sectionLine}`;
+    const baseText =
+      typeof block?.text === 'string' && block.text.trim().length > 0
+        ? block.text
+        : block?.shareText ?? '';
+    const sentences = extractPassageSentences(baseText);
+    const selectedBody = shareSelectedSentenceIndexes.length > 0
+      ? [...shareSelectedSentenceIndexes]
+          .filter(
+            index =>
+              typeof index === 'number' &&
+              index >= 0 &&
+              index < sentences.length,
+          )
+          .sort((a, b) => a - b)
+          .slice(0, SHARE_SELECTION_LIMIT)
+          .map(index => sentences[index]?.text)
+          .filter(Boolean)
+          .join('\n\n')
+      : '';
+    const fallbackShareText = cleanBlockText(block?.shareText ?? baseText) || baseText || '';
+    const shareBody = selectedBody || fallbackShareText;
+    const message = `"${shareBody}"\n\n— ${writingTitle}${sectionLine}`;
 
     try {
       await Share.share({ message });
     } catch (error) {
       console.warn('Unable to share passage', error);
     }
+  };
+
+  const handleToggleShareSentence = index => {
+    setShareSelectedSentenceIndexes(previous => {
+      if (previous.includes(index)) {
+        return previous.filter(item => item !== index);
+      }
+      if (previous.length >= SHARE_SELECTION_LIMIT) {
+        const trimmed =
+          SHARE_SELECTION_LIMIT > 1
+            ? previous.slice(-(SHARE_SELECTION_LIMIT - 1))
+            : [];
+        return [...trimmed, index];
+      }
+      return [...previous, index];
+    });
+  };
+
+  const handleProceedToShareEdit = () => {
+    if (shareSelectedSentenceIndexes.length === 0) {
+      return;
+    }
+    setCurrentScreen('shareEdit');
+  };
+
+  const handleBackToShareSelection = () => {
+    setCurrentScreen('shareSelect');
   };
 
   const handleAddToProgram = ({
@@ -1028,16 +1090,48 @@ function AppContent() {
         />
       );
       break;
-    case 'share':
+    case 'shareSelect':
       if (shareContext) {
         screenContent = (
-          <ShareScreen
+          <ShareSelectionScreen
             styles={styles}
             scaledTypography={scaledTypography}
             shareContext={shareContext}
             shareBackButtonLabel={shareBackButtonLabel}
+            selectedSentenceIndexes={shareSelectedSentenceIndexes}
+            onToggleSentence={handleToggleShareSentence}
             onClose={handleCloseShare}
             onOpenProgram={handleOpenProgram}
+            onNext={handleProceedToShareEdit}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            maxSelections={SHARE_SELECTION_LIMIT}
+          />
+        );
+      } else {
+        screenContent = (
+          <UnavailableScreen
+            styles={styles}
+            onBack={handleBackToHome}
+            onOpenProgram={handleOpenProgram}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+          />
+        );
+      }
+      break;
+    case 'shareEdit':
+      if (shareContext) {
+        screenContent = (
+          <ShareEditorScreen
+            styles={styles}
+            scaledTypography={scaledTypography}
+            shareContext={shareContext}
+            shareBackButtonLabel={shareBackButtonLabel}
+            selectedSentenceIndexes={shareSelectedSentenceIndexes}
+            onClose={handleCloseShare}
+            onOpenProgram={handleOpenProgram}
+            onChangeSelection={handleBackToShareSelection}
             hasProgramPassages={hasProgramPassages}
             programBadgeLabel={programBadgeLabel}
             activeShareTheme={activeShareTheme}
@@ -1799,6 +1893,9 @@ const styles = StyleSheet.create({
   },
   sharePreviewContent: {
     flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   sharePreviewQuote: {
     fontSize: 18,
@@ -1822,6 +1919,226 @@ const styles = StyleSheet.create({
   sharePreviewSection: {
     fontSize: 14,
     marginTop: 4,
+  },
+  sharePreviewAuthor: {
+    fontSize: 16,
+    fontWeight: '600',
+    marginTop: 20,
+  },
+  shareSelectStage: {
+    flex: 1,
+  },
+  shareSelectHelper: {
+    color: '#6f5a35',
+    marginBottom: 16,
+  },
+  shareSelectionInfoRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    marginBottom: 12,
+  },
+  shareSelectionSourceLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  shareSelectionSection: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginLeft: 12,
+    marginTop: 4,
+  },
+  shareSelectList: {
+    flex: 1,
+    marginBottom: 12,
+  },
+  shareSelectListContent: {
+    paddingBottom: 16,
+  },
+  shareSelectionPassage: {
+    lineHeight: 28,
+  },
+  shareSentenceText: {
+    paddingVertical: 2,
+    paddingHorizontal: 4,
+    borderRadius: 6,
+  },
+  shareSentenceTextSelected: {
+    backgroundColor: '#f2e6d4',
+  },
+  shareSelectionFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 4,
+  },
+  shareSelectionCount: {
+    fontSize: 13,
+    color: '#6f5a35',
+  },
+  shareNextButton: {
+    paddingVertical: 14,
+    borderRadius: 18,
+    backgroundColor: '#c6a87d',
+    borderWidth: 1,
+    borderColor: '#b18d5c',
+    alignItems: 'center',
+  },
+  shareNextButtonDisabled: {
+    backgroundColor: '#e5d6be',
+    borderColor: '#d5c3a5',
+  },
+  shareNextButtonLabel: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  shareEditorContainer: {
+    flex: 1,
+  },
+  shareEditorHeader: {
+    marginBottom: 12,
+  },
+  shareEditorBody: {
+    flex: 1,
+  },
+  sharePreviewWrapper: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  shareChangeSelectionButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f8f2e7',
+    marginBottom: 12,
+  },
+  shareChangeSelectionLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6f5a35',
+  },
+  sharePalette: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f8f2e7',
+    padding: 16,
+    marginBottom: 16,
+  },
+  sharePaletteTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+    marginBottom: 12,
+  },
+  sharePaletteTab: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#efe2ce',
+    marginHorizontal: 4,
+    marginBottom: 8,
+  },
+  sharePaletteTabActive: {
+    backgroundColor: '#c6a87d',
+    borderColor: '#b18d5c',
+  },
+  sharePaletteTabLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#5a4524',
+    textAlign: 'center',
+  },
+  sharePaletteTabLabelActive: {
+    color: '#ffffff',
+  },
+  shareToolbar: {
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f8f2e7',
+    paddingVertical: 12,
+    paddingHorizontal: 10,
+    marginBottom: 16,
+  },
+  shareToolbarTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginHorizontal: -4,
+    marginBottom: 8,
+  },
+  shareToolbarContent: {
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+    paddingHorizontal: 6,
+    minHeight: 96,
+  },
+  sharePaletteContent: {
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    paddingVertical: 10,
+    paddingHorizontal: 8,
+    minHeight: 140,
+    maxHeight: 220,
+  },
+  sharePaletteScroll: {
+    maxHeight: 200,
+  },
+  sharePaletteScrollContent: {
+    paddingBottom: 12,
+  },
+  sharePaletteChipRow: {
+    paddingHorizontal: 4,
+    paddingVertical: 4,
+  },
+  sharePaletteChip: {
+    marginBottom: 0,
+    marginRight: 8,
+  },
+  sharePaletteOptionRow: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  sharePaletteOptionCard: {
+    width: 160,
+    marginRight: 12,
+  },
+  sharePaletteSwatchRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  sharePaletteColorSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    marginHorizontal: 6,
+    marginBottom: 0,
+  },
+  sharePaletteLayoutRow: {
+    paddingVertical: 4,
+    paddingHorizontal: 2,
+  },
+  sharePaletteLayoutCard: {
+    width: 200,
+    marginRight: 12,
+    marginBottom: 0,
+  },
+  sharePaletteLayoutColumn: {
+    paddingBottom: 4,
   },
   shareThemeRow: {
     flexDirection: 'row',

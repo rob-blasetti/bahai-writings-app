@@ -458,8 +458,43 @@ ${text}`
 
 function extractSectionsFromDocument($) {
   const sections = [];
-  const anchors = $('body div.ic').filter((_, element) => $(element).find('h2').length > 0);
   const footnoteMap = buildFootnoteMap($);
+  const anchors = $('body div.ic').filter((_, element) => $(element).find('h2').length > 0);
+  const isFooterBlock = text => {
+    const normalized = normalizeWhitespace(text ?? '');
+    if (!normalized) {
+      return false;
+    }
+    if (/^This document has been downloaded from the Bah[áa][’']?[ií] Reference Library/i.test(normalized)) {
+      return true;
+    }
+    if (/^Last modified:/i.test(normalized)) {
+      return true;
+    }
+    return false;
+  };
+
+  if (anchors.length === 0) {
+    const fallbackAnchor = $('body > div.b').first();
+    const targetNode = fallbackAnchor.length > 0 ? fallbackAnchor : $('body');
+    const fallbackSectionId = 'full-text';
+    const fallbackBlocks = postProcessBlocks(
+      collectSectionContent(targetNode, null, fallbackSectionId, $, footnoteMap),
+    ).filter(block => !isFooterBlock(block.text));
+
+    if (fallbackBlocks.length > 0) {
+      sections.push({
+        id: fallbackSectionId,
+        title: 'Full Text',
+        blocks: fallbackBlocks,
+        paragraphs: fallbackBlocks.map(block =>
+          normalizeWhitespace(block.shareText ?? block.text ?? ''),
+        ),
+      });
+    }
+
+    return sections;
+  }
 
   anchors.each((index, element) => {
     const anchor = $(element);
