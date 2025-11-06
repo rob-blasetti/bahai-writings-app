@@ -850,7 +850,12 @@ export default function ShareEditorScreen({
           </View>
         </View>
       </View>
-      <TouchableOpacity
+      <View style={styles.shareToolbar}>
+        <View style={styles.sharePaletteTabs}>
+          {paletteTabs.map(tab => {
+            const isActive = tab.id === activeTool;
+            return (
+              <TouchableOpacity
                 key={tab.id}
                 onPress={() => setActiveTool(tab.id)}
                 style={[
