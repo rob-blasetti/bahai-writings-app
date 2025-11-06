@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Dimensions,
   Linking,
@@ -34,6 +35,205 @@ const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
   'https://liquidspirit.example.com/api/devotionals';
 const SHARE_SELECTION_LIMIT = 2;
+const AUTH_STORAGE_KEY = 'bahai-writings-app/authState';
+
+let cachedAsyncStorage = null;
+let hasLoggedMissingAsyncStorage = false;
+
+function createInMemoryStorage() {
+  const store = new Map();
+  return {
+    async getItem(key) {
+      return store.has(key) ? store.get(key) : null;
+    },
+    async setItem(key, value) {
+      store.set(key, value);
+    },
+    async removeItem(key) {
+      store.delete(key);
+    },
+  };
+}
+
+function getAsyncStorageModule() {
+  if (cachedAsyncStorage) {
+    return cachedAsyncStorage;
+  }
+
+  try {
+    const maybeModule = require('@react-native-async-storage/async-storage');
+    const resolvedModule = maybeModule?.default ?? maybeModule;
+    if (resolvedModule) {
+      cachedAsyncStorage = resolvedModule;
+      return cachedAsyncStorage;
+    }
+  } catch (error) {
+    if (!hasLoggedMissingAsyncStorage) {
+      console.warn(
+        '[Auth] AsyncStorage module not available; using in-memory fallback. Install @react-native-async-storage/async-storage to persist sessions across restarts.',
+      );
+      hasLoggedMissingAsyncStorage = true;
+    }
+  }
+
+  cachedAsyncStorage = createInMemoryStorage();
+  return cachedAsyncStorage;
+}
+
+async function loadPersistedAuthState() {
+  const storage = getAsyncStorageModule();
+  try {
+    const rawValue = await storage.getItem(AUTH_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+    const parsedValue = JSON.parse(rawValue);
+    if (parsedValue && typeof parsedValue === 'object') {
+      return parsedValue;
+    }
+  } catch (error) {
+    console.warn('[Auth] Unable to read persisted auth state', error);
+  }
+  return null;
+}
+
+async function savePersistedAuthState(value) {
+  const storage = getAsyncStorageModule();
+  try {
+    if (!value) {
+      await storage.removeItem(AUTH_STORAGE_KEY);
+      return;
+    }
+    await storage.setItem(AUTH_STORAGE_KEY, JSON.stringify(value));
+  } catch (error) {
+    console.warn('[Auth] Unable to persist auth state', error);
+  }
+}
+
+async function clearPersistedAuthState() {
+  const storage = getAsyncStorageModule();
+  try {
+    await storage.removeItem(AUTH_STORAGE_KEY);
+  } catch (error) {
+    console.warn('[Auth] Unable to clear persisted auth state', error);
+  }
+}
+
+function coerceTimestamp(value) {
+  if (value == null) {
+    return null;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value <= 0) {
+      return null;
+    }
+    return value;
+  }
+
+  if (typeof value === 'string' && value.trim().length > 0) {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue)) {
+      return coerceTimestamp(numericValue);
+    }
+    const parsedDate = Date.parse(value);
+    if (!Number.isNaN(parsedDate)) {
+      return parsedDate;
+    }
+  }
+
+  return null;
+}
+
+function decodeBase64Url(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return null;
+  }
+
+  const normalized = value.replace(/-/g, '+').replace(/_/g, '/');
+  const paddingLength = (4 - (normalized.length % 4)) % 4;
+  const padded = normalized + '='.repeat(paddingLength);
+
+  if (typeof globalThis?.atob === 'function') {
+    try {
+      return globalThis.atob(padded);
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (typeof globalThis?.Buffer?.from === 'function') {
+    try {
+      return globalThis.Buffer.from(padded, 'base64').toString('utf8');
+    } catch (error) {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+function getJwtExpirationMs(token) {
+  if (typeof token !== 'string' || token.length === 0) {
+    return null;
+  }
+
+  const segments = token.split('.');
+  if (segments.length < 2) {
+    return null;
+  }
+
+  const payloadText = decodeBase64Url(segments[1]);
+  if (!payloadText) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(payloadText);
+    if (typeof payload?.exp === 'number' && Number.isFinite(payload.exp)) {
+      return payload.exp > 0 ? payload.exp * 1000 : null;
+    }
+  } catch (error) {
+    return null;
+  }
+
+  return null;
+}
+
+function inferAuthExpirationMs(authResult, token) {
+  const directTimestamp = coerceTimestamp(
+    authResult?.tokenExpiresAt ??
+      authResult?.expiresAt ??
+      authResult?.tokenExpiry ??
+      authResult?.expiry ??
+      authResult?.expires ??
+      authResult?.expiration,
+  );
+
+  if (directTimestamp) {
+    return directTimestamp;
+  }
+
+  const expiresInCandidates = [
+    authResult?.tokenExpiresIn,
+    authResult?.expiresIn,
+    authResult?.tokenTtl,
+    authResult?.ttl,
+  ];
+
+  for (const candidate of expiresInCandidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate)) {
+      if (candidate <= 0) {
+        continue;
+      }
+      const now = Date.now();
+      const candidateMs = candidate > 1e6 ? candidate : candidate * 1000;
+      return now + candidateMs;
+    }
+  }
+
+  return getJwtExpirationMs(token);
+}
 
 function cleanBlockText(block) {
   const normalized = block
@@ -231,6 +431,7 @@ function AppContent() {
   const [authPassword, setAuthPassword] = useState('');
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [authError, setAuthError] = useState(null);
+  const [hasHydratedAuth, setHasHydratedAuth] = useState(false);
   const [selectedWritingId, setSelectedWritingId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
   const [randomPassage, setRandomPassage] = useState(null);
@@ -308,6 +509,76 @@ function AppContent() {
     }),
     [fontScale],
   );
+  useEffect(() => {
+    let isMounted = true;
+
+    const restorePersistedAuth = async () => {
+      try {
+        const persisted = await loadPersistedAuthState();
+        if (!isMounted) {
+          return;
+        }
+
+        if (persisted?.mode === 'guest') {
+          setAuthenticatedUser(null);
+          setAuthError(null);
+          setAuthPassword('');
+          setCurrentScreen('library');
+        } else if (persisted?.mode === 'user') {
+          const storedEmail =
+            typeof persisted.email === 'string' ? persisted.email : '';
+          const storedName =
+            typeof persisted.name === 'string' && persisted.name.trim().length > 0
+              ? persisted.name
+              : 'Kali';
+          const storedToken =
+            typeof persisted.token === 'string' ? persisted.token : null;
+
+          if (storedEmail) {
+            setAuthEmail(storedEmail);
+          }
+
+          const persistedExpiresAt = coerceTimestamp(
+            persisted.tokenExpiresAt,
+          );
+          const jwtExpiresAt = getJwtExpirationMs(storedToken);
+          const effectiveExpiresAt = persistedExpiresAt ?? jwtExpiresAt ?? null;
+
+          if (effectiveExpiresAt && effectiveExpiresAt <= Date.now()) {
+            await clearPersistedAuthState();
+            setAuthenticatedUser(null);
+            setAuthPassword('');
+            setAuthError(null);
+            setCurrentScreen('home');
+          } else {
+            setAuthenticatedUser({
+              name: storedName,
+              email: storedEmail,
+              token: storedToken,
+              tokenExpiresAt: effectiveExpiresAt,
+            });
+            setAuthPassword('');
+            setAuthError(null);
+            setCurrentScreen('library');
+          }
+        } else if (persisted) {
+          await clearPersistedAuthState();
+        }
+      } catch (error) {
+        console.warn('[Auth] Unable to restore persisted auth session', error);
+      } finally {
+        if (isMounted) {
+          setHasHydratedAuth(true);
+        }
+      }
+    };
+
+    restorePersistedAuth();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
   const shareThemes = useMemo(
     () => [
       {
@@ -528,6 +799,10 @@ function AppContent() {
     setAuthenticatedUser(null);
     setAuthError(null);
     setAuthPassword('');
+    savePersistedAuthState({
+      mode: 'guest',
+      savedAt: Date.now(),
+    });
     setCurrentScreen('library');
   };
 
@@ -566,11 +841,20 @@ function AppContent() {
         result?.name ??
         authenticatedUser?.name ??
         'Kali';
-
-      setAuthenticatedUser({
+      const token = result?.token ?? result?.accessToken ?? null;
+      const tokenExpiresAt = inferAuthExpirationMs(result, token);
+      const normalizedUser = {
         name: inferredName,
         email: trimmedEmail,
-        token: result?.token ?? result?.accessToken ?? null,
+        token,
+        tokenExpiresAt: tokenExpiresAt ?? null,
+      };
+
+      setAuthenticatedUser(normalizedUser);
+      await savePersistedAuthState({
+        mode: 'user',
+        ...normalizedUser,
+        savedAt: Date.now(),
       });
       setAuthPassword('');
       setCurrentScreen('library');
@@ -1385,6 +1669,26 @@ function AppContent() {
   const displayName = authenticatedUser?.name ?? 'Kali';
 
   let screenContent = null;
+
+  if (!hasHydratedAuth) {
+    return (
+      <View
+        style={[
+          styles.container,
+          {
+            paddingTop: safeAreaInsets.top,
+            paddingBottom: safeAreaInsets.bottom,
+            paddingLeft: safeAreaInsets.left,
+            paddingRight: safeAreaInsets.right,
+            alignItems: 'center',
+            justifyContent: 'center',
+          },
+        ]}
+      >
+        <ActivityIndicator color="#8c6239" />
+      </View>
+    );
+  }
 
   switch (currentScreen) {
     case 'home':
