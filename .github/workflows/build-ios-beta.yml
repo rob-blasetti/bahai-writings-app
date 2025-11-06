@@ -34,6 +34,16 @@ jobs:
         working-directory: ios
         run: bundle exec pod install
 
+      - name: Configure SSH for match repository access
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.MATCH_REPO_SSH_KEY }}
+
+      - name: Trust GitHub host key
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan -H github.com >> ~/.ssh/known_hosts
+
       - name: Prepare App Store Connect API key
         working-directory: ios
         env:
