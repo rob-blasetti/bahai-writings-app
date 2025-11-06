@@ -1,12 +1,7 @@
 import React, { useCallback } from 'react';
-import {
-  FlatList,
-  ScrollView,
-  Text,
-  TouchableOpacity,
-  View,
-} from 'react-native';
+import { FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 export default function SectionScreen({
   styles,
@@ -94,17 +89,20 @@ export default function SectionScreen({
   return (
     <View style={[styles.screenSurface, styles.sectionScreenSurface]}>
       <View style={styles.sectionHeader}>
-        <View style={styles.sectionHeaderTopRow}>
-          <TouchableOpacity onPress={onBack} style={styles.backButton}>
-            <Text style={styles.backButtonLabel}>Back to sections</Text>
-          </TouchableOpacity>
-          <ProgramIconButton
-            styles={styles}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
-            onPress={onOpenProgram}
-          />
-        </View>
+        <NavigationTopBar
+          styles={styles}
+          onBack={onBack}
+          backAccessibilityLabel="Back to sections"
+          containerStyle={styles.sectionHeaderTopRow}
+          rightAccessory={
+            <ProgramIconButton
+              styles={styles}
+              hasProgramPassages={hasProgramPassages}
+              programBadgeLabel={programBadgeLabel}
+              onPress={onOpenProgram}
+            />
+          }
+        />
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           {selectedWriting.title}
         </Text>

@@ -6,8 +6,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 export default function PassageScreen({
   styles,
@@ -48,25 +48,19 @@ export default function PassageScreen({
 
   return (
     <View style={styles.screenSurface} {...panResponder.panHandlers}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <View style={styles.backButtonContent}>
-            <Ionicons
-              name="chevron-back"
-              size={18}
-              color="#3b2a15"
-              style={styles.backButtonIcon}
-            />
-            <Text style={styles.backButtonLabel}>Back</Text>
-          </View>
-        </TouchableOpacity>
-        <ProgramIconButton
-          styles={styles}
-          hasProgramPassages={hasProgramPassages}
-          programBadgeLabel={programBadgeLabel}
-          onPress={onOpenProgram}
-        />
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onBack}
+        backAccessibilityLabel="Back"
+        rightAccessory={
+          <ProgramIconButton
+            styles={styles}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            onPress={onOpenProgram}
+          />
+        }
+      />
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Daily Passage
       </Text>

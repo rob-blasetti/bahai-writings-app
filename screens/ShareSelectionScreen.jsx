@@ -1,7 +1,8 @@
 import React, { Fragment, useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
-import { extractPassageSentences } from './shareUtils';
+import { NavigationTopBar } from '../components/NavigationTopBar';
+import { extractPassageSentences, getShareableBlockText } from './shareUtils';
 
 export default function ShareSelectionScreen({
   styles,
@@ -17,27 +18,44 @@ export default function ShareSelectionScreen({
   programBadgeLabel,
   maxSelections = 2,
 }) {
-  const sentences = useMemo(
-    () => extractPassageSentences(shareContext?.block?.text ?? ''),
-    [shareContext],
-  );
+  const sentences = useMemo(() => {
+    if (Array.isArray(shareContext?.sentences)) {
+      return shareContext.sentences;
+    }
+    const fallbackText = getShareableBlockText(shareContext?.block);
+    return extractPassageSentences(fallbackText);
+  }, [shareContext?.sentences, shareContext?.block]);
 
-  const selectionCount = selectedSentenceIndexes.length;
+  const normalizedSelection = useMemo(() => {
+    if (!Array.isArray(selectedSentenceIndexes)) {
+      return [];
+    }
+    const parsed = selectedSentenceIndexes
+      .map(item =>
+        typeof item === 'string' ? Number.parseInt(item, 10) : item,
+      )
+      .filter(Number.isFinite);
+    return Array.from(new Set(parsed));
+  }, [selectedSentenceIndexes]);
+
+  const selectionCount = normalizedSelection.length;
   const selectionLimitReached = selectionCount >= maxSelections;
 
   return (
     <View style={styles.screenSurface}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>{shareBackButtonLabel}</Text>
-        </TouchableOpacity>
-        <ProgramIconButton
-          styles={styles}
-          hasProgramPassages={hasProgramPassages}
-          programBadgeLabel={programBadgeLabel}
-          onPress={onOpenProgram}
-        />
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onClose}
+        backAccessibilityLabel={shareBackButtonLabel}
+        rightAccessory={
+          <ProgramIconButton
+            styles={styles}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            onPress={onOpenProgram}
+          />
+        }
+      />
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Choose what to share
       </Text>
@@ -61,7 +79,7 @@ export default function ShareSelectionScreen({
       >
         <Text style={[styles.contentParagraph, styles.shareSelectionPassage]}>
           {sentences.map(({ text, trailing }, index) => {
-            const isSelected = selectedSentenceIndexes.includes(index);
+            const isSelected = normalizedSelection.includes(index);
             return (
               <Fragment key={index}>
                 <Text

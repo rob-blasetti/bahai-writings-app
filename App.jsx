@@ -26,7 +26,7 @@ import WritingScreen from './screens/WritingScreen';
 import SectionScreen from './screens/SectionScreen';
 import PassageScreen from './screens/PassageScreen';
 import UnavailableScreen from './screens/UnavailableScreen';
-import { extractPassageSentences } from './screens/shareUtils';
+import { extractPassageSentences, getShareableBlockText } from './screens/shareUtils';
 
 const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
@@ -450,12 +450,13 @@ function AppContent() {
     returnScreen,
   }) => {
     if (!block) {
+      console.log('[Share] handleOpenShare: missing block payload', {
+        writingTitle,
+        sectionTitle,
+      });
       return;
     }
-    const baseText =
-      typeof block?.text === 'string' && block.text.trim().length > 0
-        ? block.text
-        : block?.shareText ?? '';
+    const baseText = getShareableBlockText(block);
     const sentences = extractPassageSentences(baseText);
     const defaultSelection = sentences.length === 0
       ? []
@@ -463,11 +464,21 @@ function AppContent() {
       ? [0]
       : [0, 1].filter(index => index < sentences.length);
 
+    console.log('[Share] handleOpenShare: initialized context', {
+      blockId: block.id ?? null,
+      writingTitle,
+      sectionTitle,
+      sentenceCount: sentences.length,
+      defaultSelection,
+    });
+
     setShareContext({
       block,
       writingTitle,
       sectionTitle,
       returnScreen,
+      passageText: baseText,
+      sentences,
     });
     setShareSelectedSentenceIndexes(defaultSelection);
     setCurrentScreen('shareSelect');
@@ -546,24 +557,27 @@ function AppContent() {
       return;
     }
 
-    const { block, writingTitle, sectionTitle } = shareContext;
+    const { block, writingTitle, sectionTitle, passageText, sentences: cachedSentences } = shareContext;
     const sectionLine = sectionTitle ? `, ${sectionTitle}` : '';
     const baseText =
-      typeof block?.text === 'string' && block.text.trim().length > 0
-        ? block.text
-        : block?.shareText ?? '';
-    const sentences = extractPassageSentences(baseText);
+      typeof passageText === 'string' ? passageText : getShareableBlockText(block);
+    const parsedSentences = Array.isArray(cachedSentences)
+      ? cachedSentences
+      : extractPassageSentences(baseText);
+    const sentenceTexts = parsedSentences.map(sentence =>
+      typeof sentence === 'string' ? sentence : sentence?.text ?? '',
+    );
     const selectedBody = shareSelectedSentenceIndexes.length > 0
       ? [...shareSelectedSentenceIndexes]
           .filter(
             index =>
               typeof index === 'number' &&
               index >= 0 &&
-              index < sentences.length,
+              index < sentenceTexts.length,
           )
           .sort((a, b) => a - b)
           .slice(0, SHARE_SELECTION_LIMIT)
-          .map(index => sentences[index]?.text)
+          .map(index => sentenceTexts[index])
           .filter(Boolean)
           .join('\n\n')
       : '';
@@ -578,26 +592,62 @@ function AppContent() {
     }
   };
 
-  const handleToggleShareSentence = index => {
+  const handleToggleShareSentence = rawIndex => {
+    console.log('[Share] handleToggleShareSentence: toggle requested', {
+      rawIndex,
+    });
+    const index = Number(rawIndex);
+    if (!Number.isFinite(index) || index < 0) {
+      console.log('[Share] handleToggleShareSentence: ignoring invalid index', {
+        rawIndex,
+        parsedIndex: index,
+      });
+      return;
+    }
     setShareSelectedSentenceIndexes(previous => {
-      if (previous.includes(index)) {
-        return previous.filter(item => item !== index);
-      }
-      if (previous.length >= SHARE_SELECTION_LIMIT) {
+      const normalized = [];
+      previous.forEach(item => {
+        const parsed = Number(item);
+        if (Number.isFinite(parsed) && parsed >= 0 && !normalized.includes(parsed)) {
+          normalized.push(parsed);
+        }
+      });
+
+      let nextSelection;
+
+      if (normalized.includes(index)) {
+        nextSelection = normalized.filter(item => item !== index);
+      } else if (normalized.length >= SHARE_SELECTION_LIMIT) {
         const trimmed =
           SHARE_SELECTION_LIMIT > 1
-            ? previous.slice(-(SHARE_SELECTION_LIMIT - 1))
+            ? normalized.slice(-(SHARE_SELECTION_LIMIT - 1))
             : [];
-        return [...trimmed, index];
+        nextSelection = [...trimmed, index];
+      } else {
+        nextSelection = [...normalized, index];
       }
-      return [...previous, index];
+
+      console.log('[Share] handleToggleShareSentence: selection updated', {
+        previous,
+        normalized,
+        index,
+        nextSelection,
+        shareSelectionLimit: SHARE_SELECTION_LIMIT,
+      });
+
+      return nextSelection;
     });
   };
 
   const handleProceedToShareEdit = () => {
+    console.log('[Share] handleProceedToShareEdit: attempting to proceed', {
+      currentSelection: shareSelectedSentenceIndexes,
+    });
     if (shareSelectedSentenceIndexes.length === 0) {
+      console.log('[Share] handleProceedToShareEdit: blocked, empty selection');
       return;
     }
+    console.log('[Share] handleProceedToShareEdit: navigating to shareEdit screen');
     setCurrentScreen('shareEdit');
   };
 
@@ -1514,6 +1564,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     marginBottom: 16,
   },
+  topBarRightAccessory: {
+    minWidth: 44,
+    alignItems: 'flex-end',
+  },
+  topBarRightPlaceholder: {
+    width: 44,
+    height: 44,
+  },
   screenSurface: {
     flex: 1,
     borderRadius: 16,
@@ -1545,6 +1603,15 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '500',
     color: '#3b2a15',
+  },
+  shareBackIconButton: {
+    padding: 8,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f0e4d2',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   detailSubtitle: {
     fontSize: 16,
@@ -1891,46 +1958,106 @@ const styles = StyleSheet.create({
     color: '#6f5a35',
     marginTop: 6,
   },
-  sharePreviewCard: {
-    borderRadius: 22,
+  sharePreviewWrapper: {
+    flex: 1,
+    width: '100%',
+    justifyContent: 'center',
+    alignItems: 'stretch',
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+  },
+  sharePreviewOuter: {
+    width: '100%',
+    maxWidth: 320,
+    borderRadius: 30,
     borderWidth: 2,
-    paddingVertical: 28,
-    paddingHorizontal: 24,
-    marginBottom: 24,
+    padding: 6,
+    backgroundColor: '#fdf8f2',
+    shadowColor: '#000000',
+    shadowOffset: { width: 0, height: 16 },
+    shadowOpacity: 0.12,
+    shadowRadius: 24,
+    elevation: 10,
+    alignSelf: 'center',
+  },
+  sharePreviewCard: {
+    width: '100%',
+    minHeight: 320,
+    borderRadius: 24,
+    paddingVertical: 32,
+    paddingHorizontal: 28,
+    overflow: 'hidden',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+  },
+  sharePreviewAccent: {
+    position: 'absolute',
+    top: -140,
+    right: -40,
+    width: 240,
+    height: 240,
+    borderRadius: 160,
+    opacity: 0.18,
+    zIndex: 0,
+  },
+  sharePreviewAccentSecondary: {
+    position: 'absolute',
+    bottom: -160,
+    left: -60,
+    width: 280,
+    height: 280,
+    borderRadius: 180,
+    opacity: 0.12,
+    zIndex: 0,
   },
   sharePreviewContent: {
     flex: 1,
     width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
+    justifyContent: 'flex-start',
+    alignItems: 'flex-start',
+    zIndex: 1,
   },
   sharePreviewQuote: {
-    fontSize: 18,
-    lineHeight: 30,
+    fontSize: 20,
+    lineHeight: 32,
     fontWeight: '500',
   },
-  sharePreviewMeta: {
-    marginTop: 20,
+  sharePreviewAttribution: {
+    marginTop: 24,
+    width: '100%',
   },
-  sharePreviewMetaLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  sharePreviewTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    marginTop: 6,
-  },
-  sharePreviewSection: {
-    fontSize: 14,
-    marginTop: 4,
+  sharePreviewDivider: {
+    width: 48,
+    height: 2,
+    opacity: 0.35,
+    marginBottom: 12,
   },
   sharePreviewAuthor: {
     fontSize: 16,
     fontWeight: '600',
-    marginTop: 20,
+    marginBottom: 4,
+  },
+  sharePreviewSection: {
+    fontSize: 14,
+    opacity: 0.9,
+  },
+  sharePreviewFooter: {
+    paddingTop: 16,
+    zIndex: 1,
+    alignItems: 'center',
+  },
+  sharePreviewFooterLine: {
+    width: '100%',
+    height: 1,
+    opacity: 0.3,
+    marginBottom: 10,
+  },
+  sharePreviewFooterLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
   shareSelectStage: {
     flex: 1,
@@ -1979,19 +2106,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 4,
+    marginTop: 12,
   },
   shareSelectionCount: {
     fontSize: 13,
     color: '#6f5a35',
   },
   shareNextButton: {
+    minWidth: 132,
     paddingVertical: 14,
-    borderRadius: 18,
+    paddingHorizontal: 24,
+    borderRadius: 999,
     backgroundColor: '#c6a87d',
     borderWidth: 1,
     borderColor: '#b18d5c',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   shareNextButtonDisabled: {
     backgroundColor: '#e5d6be',
@@ -2010,12 +2140,6 @@ const styles = StyleSheet.create({
   },
   shareEditorBody: {
     flex: 1,
-  },
-  sharePreviewWrapper: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 8,
   },
   shareChangeSelectionButton: {
     alignSelf: 'flex-start',
@@ -2055,19 +2179,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#efe2ce',
     marginHorizontal: 4,
     marginBottom: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   sharePaletteTabActive: {
     backgroundColor: '#c6a87d',
     borderColor: '#b18d5c',
   },
-  sharePaletteTabLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#5a4524',
+  sharePaletteTabIcon: {
     textAlign: 'center',
-  },
-  sharePaletteTabLabelActive: {
-    color: '#ffffff',
   },
   shareToolbar: {
     borderRadius: 18,
@@ -2348,6 +2468,29 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#ffffff',
+  },
+  shareFloatingButton: {
+    position: 'absolute',
+    right: 24,
+    bottom: 24,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#c6a87d',
+    borderWidth: 1,
+    borderColor: '#b18d5c',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+  shareFloatingButtonDisabled: {
+    backgroundColor: '#e5d6be',
+    borderColor: '#d5c3a5',
+    opacity: 0.5,
   },
   contentScroll: {
     paddingBottom: 40,

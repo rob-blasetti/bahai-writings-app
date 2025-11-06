@@ -7,6 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 function ProgramPassageCard({ styles, item, index, renderBlockContent, onRemove }) {
   return (
@@ -195,19 +196,21 @@ export default function ProgramScreen({
 
   return (
     <View style={styles.screenSurface}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>{programBackButtonLabel}</Text>
-        </TouchableOpacity>
-        {hasProgramPassages ? (
-          <TouchableOpacity
-            onPress={onClearProgram}
-            style={styles.programClearButton}
-          >
-            <Text style={styles.programClearLabel}>Clear all</Text>
-          </TouchableOpacity>
-        ) : null}
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onClose}
+        backAccessibilityLabel={programBackButtonLabel}
+        rightAccessory={
+          hasProgramPassages ? (
+            <TouchableOpacity
+              onPress={onClearProgram}
+              style={styles.programClearButton}
+            >
+              <Text style={styles.programClearLabel}>Clear all</Text>
+            </TouchableOpacity>
+          ) : null
+        }
+      />
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Devotional Program
       </Text>

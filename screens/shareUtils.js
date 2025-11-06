@@ -1,5 +1,21 @@
 const SENTENCE_REGEX = /([^.!?]+[.!?]+[\])"'“”’]*)([\s\u00A0]*)/g;
 
+export const getShareableBlockText = block => {
+  if (!block) {
+    return '';
+  }
+
+  const primary =
+    typeof block?.text === 'string' && block.text.trim().length > 0
+      ? block.text
+      : '';
+  if (primary) {
+    return primary;
+  }
+
+  return typeof block?.shareText === 'string' ? block.shareText : '';
+};
+
 export const extractPassageSentences = text => {
   if (!text) {
     return [];

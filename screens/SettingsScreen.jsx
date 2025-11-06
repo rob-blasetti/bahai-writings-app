@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 export default function SettingsScreen({
   styles,
@@ -15,17 +16,19 @@ export default function SettingsScreen({
 }) {
   return (
     <View style={styles.screenSurface}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>Back to library</Text>
-        </TouchableOpacity>
-        <ProgramIconButton
-          styles={styles}
-          hasProgramPassages={hasProgramPassages}
-          programBadgeLabel={programBadgeLabel}
-          onPress={onOpenProgram}
-        />
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onClose}
+        backAccessibilityLabel="Back to library"
+        rightAccessory={
+          <ProgramIconButton
+            styles={styles}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            onPress={onOpenProgram}
+          />
+        }
+      />
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Settings
       </Text>

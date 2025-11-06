@@ -1,6 +1,7 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 export default function UnavailableScreen({
   styles,
@@ -11,17 +12,19 @@ export default function UnavailableScreen({
 }) {
   return (
     <View style={styles.screenSurface}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onBack} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>Back to library</Text>
-        </TouchableOpacity>
-        <ProgramIconButton
-          styles={styles}
-          hasProgramPassages={hasProgramPassages}
-          programBadgeLabel={programBadgeLabel}
-          onPress={onOpenProgram}
-        />
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onBack}
+        backAccessibilityLabel="Back to library"
+        rightAccessory={
+          <ProgramIconButton
+            styles={styles}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            onPress={onOpenProgram}
+          />
+        }
+      />
       <View style={styles.emptyState}>
         <Text style={styles.emptyStateText}>
           The selected content is not available.

@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 export default function SignInScreen({
   styles,
@@ -20,11 +21,11 @@ export default function SignInScreen({
 }) {
   return (
     <View style={styles.screenSurface}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onCancel} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>Back</Text>
-        </TouchableOpacity>
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onCancel}
+        backAccessibilityLabel="Back"
+      />
       <View style={styles.authFormContainer}>
         <Text style={styles.authFormTitle}>Sign in to Liquid Spirit</Text>
         <Text style={styles.authFormSubtitle}>

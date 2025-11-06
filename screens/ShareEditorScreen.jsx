@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
+import { extractPassageSentences, getShareableBlockText } from './shareUtils';
 import { ProgramIconButton } from '../components/IconButtons';
-import { extractPassageSentences } from './shareUtils';
+import { NavigationTopBar } from '../components/NavigationTopBar';
 
 const getThemeChipStyle = (theme, isActive) => ({
   borderColor: theme.accentColor,
@@ -25,22 +27,52 @@ export default function ShareEditorScreen({
   onSelectShareTheme,
   onShareNow,
 }) {
-  const sentences = useMemo(
-    () => extractPassageSentences(shareContext?.block?.text ?? ''),
-    [shareContext],
-  );
-  const sanitizedSelection = useMemo(
-    () =>
-      selectedSentenceIndexes
-        .filter(
-          index =>
-            typeof index === 'number' &&
-            index >= 0 &&
-            index < sentences.length,
-        ),
-    [selectedSentenceIndexes, sentences],
-  );
+  const passageText = useMemo(() => {
+    if (typeof shareContext?.passageText === 'string') {
+      return shareContext.passageText;
+    }
+    return getShareableBlockText(shareContext?.block);
+  }, [shareContext?.passageText, shareContext?.block]);
+
+  const sentences = useMemo(() => {
+    if (Array.isArray(shareContext?.sentences)) {
+      return shareContext.sentences;
+    }
+    return extractPassageSentences(passageText);
+  }, [shareContext?.sentences, passageText]);
+  const sanitizedSelection = useMemo(() => {
+    if (!Array.isArray(selectedSentenceIndexes) || sentences.length === 0) {
+      return [];
+    }
+
+    const normalized = selectedSentenceIndexes
+      .map(item =>
+        typeof item === 'string' ? Number.parseInt(item, 10) : item,
+      )
+      .filter(Number.isFinite);
+
+    const unique = [];
+    normalized.forEach(index => {
+      if (
+        index >= 0 &&
+        index < sentences.length &&
+        !unique.includes(index)
+      ) {
+        unique.push(index);
+      }
+    });
+
+    return unique;
+  }, [selectedSentenceIndexes, sentences]);
   const hasSelection = sanitizedSelection.length > 0;
+
+  useEffect(() => {
+    console.log('[ShareEditor] selection state received', {
+      rawIndexes: selectedSentenceIndexes,
+      sanitizedSelection,
+      totalSentences: sentences.length,
+    });
+  }, [selectedSentenceIndexes, sanitizedSelection, sentences]);
 
   const fontOptions = useMemo(
     () => [
@@ -206,11 +238,26 @@ export default function ShareEditorScreen({
       return '';
     }
     const sortedIndexes = [...sanitizedSelection].sort((a, b) => a - b);
-    return sortedIndexes
-      .map(index => sentences[index]?.text)
+    const compiled = sortedIndexes
+      .map(index => {
+        const sentence = sentences[index];
+        if (!sentence) {
+          return '';
+        }
+        if (typeof sentence === 'string') {
+          return sentence;
+        }
+        return sentence.text ?? '';
+      })
       .filter(Boolean)
       .join('\n\n');
-  }, [sanitizedSelection, sentences]);
+
+    if (compiled) {
+      return compiled;
+    }
+
+    return typeof passageText === 'string' ? passageText.trim() : '';
+  }, [sanitizedSelection, sentences, passageText]);
 
   const baseParagraphStyle = scaledTypography?.contentParagraph ?? {};
   const calculatedQuoteSize = baseParagraphStyle.fontSize
@@ -222,11 +269,11 @@ export default function ShareEditorScreen({
 
   const paletteTabs = useMemo(
     () => [
-      { id: 'theme', label: 'Theme' },
-      { id: 'font', label: 'Font' },
-      { id: 'textColor', label: 'Text' },
-      { id: 'background', label: 'Background' },
-      { id: 'layout', label: 'Layout' },
+      { id: 'theme', label: 'Theme', icon: 'color-palette-outline' },
+      { id: 'font', label: 'Font', icon: 'text-outline' },
+      { id: 'textColor', label: 'Text color', icon: 'color-fill-outline' },
+      { id: 'background', label: 'Background', icon: 'image-outline' },
+      { id: 'layout', label: 'Layout', icon: 'apps-outline' },
     ],
     [],
   );
@@ -388,17 +435,19 @@ export default function ShareEditorScreen({
 
   return (
     <View style={styles.screenSurface}>
-      <View style={styles.topBar}>
-        <TouchableOpacity onPress={onClose} style={styles.backButton}>
-          <Text style={styles.backButtonLabel}>{shareBackButtonLabel}</Text>
-        </TouchableOpacity>
-        <ProgramIconButton
-          styles={styles}
-          hasProgramPassages={hasProgramPassages}
-          programBadgeLabel={programBadgeLabel}
-          onPress={onOpenProgram}
-        />
-      </View>
+      <NavigationTopBar
+        styles={styles}
+        onBack={onClose}
+        backAccessibilityLabel={shareBackButtonLabel}
+        rightAccessory={
+          <ProgramIconButton
+            styles={styles}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            onPress={onOpenProgram}
+          />
+        }
+      />
       <View style={styles.shareEditorHeader}>
         <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
           Share this passage
@@ -407,59 +456,94 @@ export default function ShareEditorScreen({
           Craft a beautiful moment before you send this inspiration to someone you love.
         </Text>
       </View>
-      <TouchableOpacity
-        onPress={onChangeSelection}
-        style={styles.shareChangeSelectionButton}
-        accessibilityRole="button"
-      >
-        <Text style={styles.shareChangeSelectionLabel}>Change selection</Text>
-      </TouchableOpacity>
       <View style={styles.shareEditorBody}>
-        <View
-          style={[
-            styles.sharePreviewCard,
-            {
-              backgroundColor: activeBackground.backgroundColor,
-              borderColor: activeBackground.borderColor,
-            },
-          ]}
-        >
-          <View style={[styles.sharePreviewContent, activeLayout.contentStyle]}>
-            <Text
+        <View style={styles.sharePreviewWrapper}>
+          <View
+            style={[
+              styles.sharePreviewOuter,
+              { borderColor: activeBackground.borderColor },
+            ]}
+          >
+            <View
               style={[
-                styles.sharePreviewQuote,
-                baseParagraphStyle,
-                activeLayout.quoteStyle,
-                activeFont.style,
-                {
-                  color: activeTextColor,
-                  fontSize: calculatedQuoteSize,
-                  lineHeight: calculatedQuoteLineHeight,
-                },
+                styles.sharePreviewCard,
+                { backgroundColor: activeBackground.backgroundColor },
               ]}
             >
-              {shareText || 'Select sentences to preview.'}
-            </Text>
-            <Text
-              style={[
-                styles.sharePreviewAuthor,
-                activeLayout.authorStyle,
-                { color: activeTextColor },
-              ]}
-            >
-              — {shareContext?.writingTitle}
-            </Text>
-            {shareContext?.sectionTitle ? (
-              <Text
+              <View
                 style={[
-                  styles.sharePreviewSection,
-                  activeLayout.authorStyle,
-                  { color: activeTextColor },
+                  styles.sharePreviewAccent,
+                  { backgroundColor: activeBackground.borderColor },
                 ]}
-              >
-                {shareContext.sectionTitle}
-              </Text>
-            ) : null}
+              />
+              <View
+                style={[
+                  styles.sharePreviewAccentSecondary,
+                  { backgroundColor: activeBackground.borderColor },
+                ]}
+              />
+              <View style={[styles.sharePreviewContent, activeLayout.contentStyle]}>
+                <Text
+                  style={[
+                    styles.sharePreviewQuote,
+                    baseParagraphStyle,
+                    activeLayout.quoteStyle,
+                    activeFont.style,
+                    {
+                      color: activeTextColor,
+                      fontSize: calculatedQuoteSize,
+                      lineHeight: calculatedQuoteLineHeight,
+                    },
+                  ]}
+                >
+                  {shareText || 'Select sentences to preview.'}
+                </Text>
+                <View style={styles.sharePreviewAttribution}>
+                  <View
+                    style={[
+                      styles.sharePreviewDivider,
+                      { backgroundColor: activeTextColor },
+                    ]}
+                  />
+                  <Text
+                    style={[
+                      styles.sharePreviewAuthor,
+                      activeLayout.authorStyle,
+                      { color: activeTextColor },
+                    ]}
+                  >
+                    — {shareContext?.writingTitle}
+                  </Text>
+                  {shareContext?.sectionTitle ? (
+                    <Text
+                      style={[
+                        styles.sharePreviewSection,
+                        activeLayout.authorStyle,
+                        { color: activeTextColor },
+                      ]}
+                    >
+                      {shareContext.sectionTitle}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              <View style={styles.sharePreviewFooter}>
+                <View
+                  style={[
+                    styles.sharePreviewFooterLine,
+                    { backgroundColor: activeTextColor },
+                  ]}
+                />
+                <Text
+                  style={[
+                    styles.sharePreviewFooterLabel,
+                    { color: activeTextColor },
+                  ]}
+                >
+                  Bahai Writings
+                </Text>
+              </View>
+            </View>
           </View>
         </View>
       </View>
@@ -476,16 +560,15 @@ export default function ShareEditorScreen({
                   isActive && styles.sharePaletteTabActive,
                 ]}
                 accessibilityRole="tab"
+                accessibilityLabel={tab.label}
                 accessibilityState={{ selected: isActive }}
               >
-                <Text
-                  style={[
-                    styles.sharePaletteTabLabel,
-                    isActive && styles.sharePaletteTabLabelActive,
-                  ]}
-                >
-                  {tab.label}
-                </Text>
+                <Ionicons
+                  name={tab.icon}
+                  size={20}
+                  color={isActive ? '#ffffff' : '#5a4524'}
+                  style={styles.sharePaletteTabIcon}
+                />
               </TouchableOpacity>
             );
           })}
@@ -495,12 +578,14 @@ export default function ShareEditorScreen({
       <TouchableOpacity
         onPress={onShareNow}
         style={[
-          styles.shareNowButton,
-          !hasSelection && styles.shareNextButtonDisabled,
+          styles.shareFloatingButton,
+          !hasSelection && styles.shareFloatingButtonDisabled,
         ]}
+        accessibilityRole="button"
+        accessibilityLabel="Share passage"
         disabled={!hasSelection}
       >
-        <Text style={styles.shareNowButtonLabel}>Share passage</Text>
+        <Ionicons name="share-outline" size={24} color="#ffffff" />
       </TouchableOpacity>
     </View>
   );
