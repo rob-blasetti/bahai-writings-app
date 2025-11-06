@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
@@ -185,6 +185,44 @@ function AppContent() {
     () => (writingsManifest?.items ?? []).filter(item => item.text?.length),
     [],
   );
+  const searchableSections = useMemo(() => {
+    return writings.flatMap(writing => {
+      const sections = getSectionsForWriting(writing);
+      return sections
+        .map(section => {
+          const blockTexts = section.blocks
+            .map(block => {
+              const shareSource =
+                typeof block?.shareText === 'string' && block.shareText.length > 0
+                  ? block.shareText
+                  : typeof block?.text === 'string'
+                  ? block.text
+                  : '';
+              const normalized = cleanBlockText(shareSource);
+              return normalized.length > 0
+                ? normalized
+                : cleanBlockText(typeof block?.text === 'string' ? block.text : '');
+            })
+            .filter(Boolean);
+
+          if (blockTexts.length === 0) {
+            return null;
+          }
+
+          return {
+            id: `${writing.id}__${section.id}`,
+            writingId: writing.id,
+            writingTitle: writing.title ?? 'Unknown writing',
+            sectionId: section.id,
+            sectionTitle: section.title,
+            blocks: section.blocks,
+            searchableText: blockTexts.join(' ').toLowerCase(),
+            preview: blockTexts[0],
+          };
+        })
+        .filter(Boolean);
+    });
+  }, [writings]);
   const [currentScreen, setCurrentScreen] = useState('home');
   const [authenticatedUser, setAuthenticatedUser] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -655,30 +693,45 @@ function AppContent() {
     setCurrentScreen('shareSelect');
   };
 
-  const handleAddToProgram = ({
+  const createProgramItemFromBlock = useCallback(({
     block,
     writingId,
     writingTitle,
     sectionId,
     sectionTitle,
   }) => {
-    if (!block?.text) {
-      return;
+    if (!block) {
+      return null;
     }
+
+    const baseText =
+      typeof block.text === 'string' && block.text.length > 0 ? block.text : '';
+    const shareSource =
+      typeof block.shareText === 'string' && block.shareText.length > 0
+        ? block.shareText
+        : baseText;
+    const normalizedText = cleanBlockText(shareSource || baseText || '');
+
+    if (normalizedText.length === 0) {
+      return null;
+    }
+
     const timestamp = Date.now();
     const normalizedWritingId = writingId ?? null;
     const normalizedSectionId = sectionId ?? null;
     const blockId = block.id ?? `block-${timestamp}`;
+
     const safeBlock = {
       id: blockId,
-      text: block.text,
-      shareText: block.shareText ?? block.text,
+      text: baseText,
+      shareText: shareSource || baseText,
       type: block.type ?? 'paragraph',
       sourceId: block.sourceId ?? null,
       attribution: block.attribution ?? null,
       footnotes: Array.isArray(block.footnotes) ? [...block.footnotes] : [],
     };
-    const programItem = {
+
+    return {
       id: `program-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
       block: safeBlock,
       writingId: normalizedWritingId,
@@ -686,23 +739,183 @@ function AppContent() {
       sectionId: normalizedSectionId,
       sectionTitle: sectionTitle ?? null,
     };
+  }, []);
 
-    setProgramPassages(previous => {
-      if (
-        previous.some(
-          item =>
-            item.block.id === blockId &&
-            item.writingId === normalizedWritingId &&
-            item.sectionId === normalizedSectionId,
-        )
-      ) {
-        return previous;
+  const addProgramItems = useCallback(
+    newItems => {
+      if (!Array.isArray(newItems) || newItems.length === 0) {
+        return 0;
       }
-      return [...previous, programItem];
+
+      let additions = 0;
+
+      setProgramPassages(previous => {
+        const existing = Array.isArray(previous) ? previous : [];
+        const existingKeys = new Set(
+          existing.map(
+            item =>
+              `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+                item.sectionId ?? ''
+              }`,
+          ),
+        );
+
+        const itemsToAdd = [];
+
+        newItems.forEach(item => {
+          if (!item?.block?.id) {
+            return;
+          }
+          const key = `${item.block.id}::${item.writingId ?? ''}::${
+            item.sectionId ?? ''
+          }`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            itemsToAdd.push(item);
+          }
+        });
+
+        additions = itemsToAdd.length;
+
+        if (itemsToAdd.length === 0) {
+          return existing;
+        }
+
+        return [...existing, ...itemsToAdd];
+      });
+
+      if (additions > 0) {
+        setProgramSubmissionError(null);
+        setProgramSubmissionSuccess(null);
+      }
+
+      return additions;
+    },
+    [setProgramPassages, setProgramSubmissionError, setProgramSubmissionSuccess],
+  );
+
+  const handleAddToProgram = ({
+    block,
+    writingId,
+    writingTitle,
+    sectionId,
+    sectionTitle,
+  }) => {
+    const programItem = createProgramItemFromBlock({
+      block,
+      writingId,
+      writingTitle,
+      sectionId,
+      sectionTitle,
     });
-    setProgramSubmissionError(null);
-    setProgramSubmissionSuccess(null);
+
+    if (!programItem) {
+      return;
+    }
+
+    addProgramItems([programItem]);
   };
+
+  const handleAddProgramSections = useCallback(
+    sections => {
+      if (!Array.isArray(sections) || sections.length === 0) {
+        return 0;
+      }
+
+      const items = [];
+
+      sections.forEach(section => {
+        if (!section || !Array.isArray(section.blocks)) {
+          return;
+        }
+
+        section.blocks.forEach(block => {
+          const programItem = createProgramItemFromBlock({
+            block,
+            writingId: section.writingId,
+            writingTitle: section.writingTitle,
+            sectionId: section.sectionId,
+            sectionTitle: section.sectionTitle,
+          });
+
+          if (programItem) {
+            items.push(programItem);
+          }
+        });
+      });
+
+      return addProgramItems(items);
+    },
+    [addProgramItems, createProgramItemFromBlock],
+  );
+
+  const searchSectionsByTheme = useCallback(
+    (theme, { limit = 8 } = {}) => {
+      if (typeof theme !== 'string') {
+        return [];
+      }
+
+      const normalizedQuery = cleanBlockText(theme).toLowerCase();
+
+      if (normalizedQuery.length === 0) {
+        return [];
+      }
+
+      const uniqueTerms = Array.from(
+        new Set(
+          normalizedQuery
+            .split(/\s+/)
+            .map(term => term.trim())
+            .filter(Boolean),
+        ),
+      );
+
+      if (uniqueTerms.length === 0) {
+        return [];
+      }
+
+      const scoredSections = searchableSections
+        .map(section => {
+          if (!section?.searchableText) {
+            return null;
+          }
+
+          let score = 0;
+
+          uniqueTerms.forEach(term => {
+            if (section.searchableText.includes(term)) {
+              const occurrences = section.searchableText.split(term).length - 1;
+              score += occurrences;
+            }
+          });
+
+          if (score === 0) {
+            return null;
+          }
+
+          return { ...section, score };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+          if (b.score !== a.score) {
+            return b.score - a.score;
+          }
+          return a.sectionTitle.localeCompare(b.sectionTitle);
+        });
+
+      return scoredSections.slice(0, limit).map(section => ({
+        id: section.id,
+        writingId: section.writingId,
+        writingTitle: section.writingTitle,
+        sectionId: section.sectionId,
+        sectionTitle: section.sectionTitle,
+        blocks: section.blocks,
+        preview: section.preview,
+        score: section.score,
+      }));
+    },
+    [searchableSections],
+  );
 
   const handleOpenProgram = () => {
     if (currentScreen === 'program') {
@@ -1224,6 +1437,8 @@ function AppContent() {
           programSubmissionSuccess={programSubmissionSuccess}
           isSubmittingProgram={isSubmittingProgram}
           onRemoveFromProgram={handleRemoveFromProgram}
+          onSearchProgramTheme={searchSectionsByTheme}
+          onAddProgramSections={handleAddProgramSections}
         />
       );
       break;
@@ -1689,6 +1904,42 @@ const styles = StyleSheet.create({
   programListContent: {
     paddingBottom: 32,
   },
+  programThemeSection: {
+    paddingHorizontal: 4,
+    paddingBottom: 24,
+  },
+  programThemeTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2c1f0c',
+    marginBottom: 8,
+  },
+  programThemeDescription: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginBottom: 12,
+  },
+  programThemeButton: {
+    alignSelf: 'flex-start',
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#c6a87d',
+    backgroundColor: '#f5e9d6',
+  },
+  programThemeButtonLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#3b2a15',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  programThemeFeedback: {
+    fontSize: 13,
+    color: '#6f5a35',
+    marginTop: 12,
+  },
   programForm: {
     paddingHorizontal: 4,
     paddingBottom: 24,
@@ -1811,6 +2062,112 @@ const styles = StyleSheet.create({
     color: '#3a7a5a',
     textAlign: 'center',
     marginTop: 4,
+  },
+  programModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(43, 27, 10, 0.6)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  programModalCard: {
+    backgroundColor: '#fffaf3',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    padding: 20,
+    maxHeight: '90%',
+  },
+  programModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2c1f0c',
+    marginBottom: 6,
+  },
+  programModalDescription: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginBottom: 16,
+  },
+  programModalInput: {
+    marginBottom: 12,
+  },
+  programModalSearchRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginBottom: 12,
+  },
+  programModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#c6a87d',
+    backgroundColor: '#f0e4d2',
+  },
+  programModalButtonLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  programModalMessage: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginBottom: 12,
+  },
+  programModalResults: {
+    flexGrow: 0,
+    marginBottom: 16,
+  },
+  programModalResultsContent: {
+    paddingBottom: 4,
+  },
+  programModalResult: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#f7f0e3',
+    marginBottom: 12,
+  },
+  programModalResultSelected: {
+    borderColor: '#6d9c7c',
+    backgroundColor: '#e9f3ec',
+  },
+  programModalResultTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c1f0c',
+  },
+  programModalResultWriting: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginTop: 4,
+  },
+  programModalResultPreview: {
+    fontSize: 14,
+    color: '#3b2a15',
+    marginTop: 8,
+  },
+  programModalResultToggle: {
+    fontSize: 12,
+    color: '#6f5a35',
+    marginTop: 10,
+  },
+  programModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+  },
+  programModalActionSpacing: {
+    marginLeft: 12,
+  },
+  programModalButtonPrimary: {
+    backgroundColor: '#6d9c7c',
+    borderColor: '#598467',
+  },
+  programModalButtonPrimaryLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   secondaryButton: {
     alignSelf: 'center',
