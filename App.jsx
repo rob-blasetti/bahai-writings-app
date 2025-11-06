@@ -15,7 +15,6 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import RNShare from 'react-native-share';
 import writingsManifest from './assets/generated/writings.json';
 import { authenticateLiquidSpirit } from './services/liquidSpiritAuth';
 import HomeScreen from './screens/HomeScreen';
@@ -927,55 +926,23 @@ function AppContent() {
     const message = `"${shareBody}"\n\n— ${writingTitle}${sectionLine}`;
 
     const shareUrls = [];
-    let inferredType = null;
 
     if (composedImageUri) {
       shareUrls.push(composedImageUri);
-      inferredType = 'image/png';
     } else if (media?.uri) {
       shareUrls.push(media.uri);
-      inferredType = media.type ?? null;
     }
 
     const baseOptions = {
       message,
     };
 
-    if (shareUrls.length === 1) {
+    if (shareUrls.length > 0) {
       baseOptions.url = shareUrls[0];
     }
 
-    if (shareUrls.length > 1) {
-      baseOptions.urls = shareUrls;
-    }
-
-    if (inferredType) {
-      baseOptions.type = inferredType;
-    }
-
-    const shareSingleWithFallback = async social => {
-      try {
-        await RNShare.shareSingle({ ...baseOptions, social });
-      } catch (error) {
-        if (error?.message && /not installed/i.test(error.message)) {
-          await NativeShare.share(baseOptions);
-          return;
-        }
-        throw error;
-      }
-    };
-
     try {
       switch (destination) {
-        case 'whatsapp':
-          await shareSingleWithFallback(RNShare.Social.WHATSAPP);
-          break;
-        case 'instagram':
-          await shareSingleWithFallback(RNShare.Social.INSTAGRAM);
-          break;
-        case 'facebook':
-          await shareSingleWithFallback(RNShare.Social.FACEBOOK);
-          break;
         case 'liquidSpirit': {
           const encodedMessage = encodeURIComponent(message);
           const url = `liquidspirit://share?text=${encodedMessage}`;

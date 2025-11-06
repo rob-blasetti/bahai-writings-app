@@ -64,8 +64,10 @@ ios/Pods/
 # fastlane config & artifacts
 ios/Gemfile
 ios/Gemfile.lock
-ios/fastlane/
 ios/vendor/
+ios/fastlane/AuthKey*.p8
+ios/fastlane/report.xml
+ios/fastlane/ios/Config.xcconfig
 **/fastlane/report.xml
 **/fastlane/Preview.html
 **/fastlane/screenshots

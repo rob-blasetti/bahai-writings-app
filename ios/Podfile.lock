@@ -47,7 +47,6 @@ PODS:
     - React-RCTText (= 0.82.1)
     - React-RCTVibration (= 0.82.1)
   - React-callinvoker (0.82.1)
-  - React-Codegen (0.1.0)
   - React-Core (0.82.1):
     - boost
     - DoubleConversion
@@ -2553,14 +2552,6 @@ PODS:
     - ReactCommon/turbomodule/core
     - SocketRocket
     - Yoga
-  - RNShare (10.2.1):
-    - RCT-Folly
-    - RCTRequired
-    - RCTTypeSafety
-    - React-Codegen
-    - React-Core
-    - React-RCTFabric
-    - ReactCommon/turbomodule/core
   - RNVectorIcons (10.3.0):
     - boost
     - DoubleConversion
@@ -2671,14 +2662,12 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios`)
   - ReactCommon/turbomodule/core (from `../node_modules/react-native/ReactCommon`)
   - "RNCAsyncStorage (from `../node_modules/@react-native-async-storage/async-storage`)"
-  - RNShare (from `../node_modules/react-native-share`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - SocketRocket (~> 0.7.1)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
 SPEC REPOS:
   trunk:
-    - React-Codegen
     - SocketRocket
 
 EXTERNAL SOURCES:
@@ -2837,8 +2826,6 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native/ReactCommon"
   RNCAsyncStorage:
     :path: "../node_modules/@react-native-async-storage/async-storage"
-  RNShare:
-    :path: "../node_modules/react-native-share"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
   Yoga:
@@ -2858,7 +2845,6 @@ SPEC CHECKSUMS:
   RCTTypeSafety: c693294e3993056955c3010eb1ebc574f1fcded6
   React: aeece948ccf155182ea86a2395786ed31cf21c61
   React-callinvoker: 05ad789505922d68c06cde1c8060e734df9fe182
-  React-Codegen: 4b8b4817cea7a54b83851d4c1f91f79aa73de30a
   React-Core: 956ac86b4d9b0c0fd9a14b9cc533aa297bb501c0
   React-CoreModules: 3a8d39778cf9eeca40e419814e875da1a8e29855
   React-cxxreact: db275765e1eb08f038599fb44114cf57ee0d18cd
@@ -2923,11 +2909,10 @@ SPEC CHECKSUMS:
   ReactCodegen: 878add6c7d8ff8cea87697c44d29c03b79b6f2d9
   ReactCommon: 804dc80944fa90b86800b43c871742ec005ca424
   RNCAsyncStorage: 29f0230e1a25f36c20b05f65e2eb8958d6526e82
-  RNShare: 268bd40f6f3830299d187b05d3c6f7bbbb3e9d85
   RNVectorIcons: 791f13226ec4a3fd13062eda9e892159f0981fae
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: 689c8e04277f3ad631e60fe2a08e41d411daf8eb
 
-PODFILE CHECKSUM: 0f6d1ee7545a63ff71deddfc01404e5c56ca8de8
+PODFILE CHECKSUM: 7fb9cc328e84aab8dc222d7265163123a0c031c3
 
 COCOAPODS: 1.16.2

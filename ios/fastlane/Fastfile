@@ -1,0 +1,55 @@
+default_platform(:ios)
+
+require 'dotenv' # ✅ Require the dotenv gem
+Dotenv.load(File.expand_path('.env.beta', __dir__))
+
+platform :ios do
+  desc "Push a new beta build to TestFlight"
+  lane :beta do
+    # Print environment variables to verify they load correctly
+    UI.message "🚀 Using API_URL: #{ENV['API_URL']}"
+    UI.message "🔑 ASC_KEY_FILE: #{ENV['ASC_KEY_FILE']}"
+
+    sh "mkdir -p ios"
+    sh "touch ios/Config.xcconfig"
+    
+    # 1. Pull down/update provisioning profiles & certificates from your signing repo
+    match(
+      type: "appstore",
+      git_url: "git@github.com:rob-blasetti/signing-repo.git",
+      app_identifier: "com.liquidspirit.kali"
+    )
+
+    # 2. Increment build number
+    increment_build_number(
+      xcodeproj: "bahai_writings_app.xcodeproj"
+    )
+
+    # 3. Inject Environment Variables into Xcode
+    sh "echo 'API_URL=#{ENV['API_URL']}' > ios/Config.xcconfig"
+    sh "echo 'AWS_ACCESS_KEY_ID=#{ENV['AWS_ACCESS_KEY_ID']}' >> ios/Config.xcconfig"
+    sh "echo 'AWS_SECRET_ACCESS_KEY=#{ENV['AWS_SECRET_ACCESS_KEY']}' >> ios/Config.xcconfig"
+    sh "echo 'AWS_REGION=#{ENV['AWS_REGION']}' >> ios/Config.xcconfig"
+
+    # 4. Build the app
+    build_app(
+      workspace: "bahai_writings_app.xcworkspace",
+      scheme: "bahai_writings_app",
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+          "com.liquidspirit.kali" => "match AppStore com.liquidspirit.kali"
+        }
+      }
+    )
+
+    # 5. Upload to TestFlight
+    upload_to_testflight(
+      api_key: app_store_connect_api_key(
+      key_id: ENV['ASC_KEY_ID'],
+      issuer_id: ENV['ASC_ISSUER_ID'],
+      key_filepath: ENV['ASC_KEY_FILE']
+    )
+  )
+  end
+end

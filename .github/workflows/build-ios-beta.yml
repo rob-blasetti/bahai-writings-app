@@ -34,10 +34,19 @@ jobs:
         working-directory: ios
         run: bundle exec pod install
 
+      - name: Prepare App Store Connect API key
+        working-directory: ios
+        env:
+          APP_STORE_CONNECT_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT_BASE64 }}
+        run: |
+          ruby -r base64 -e 'File.write("fastlane/AuthKey.p8", Base64.decode64(ENV.fetch("APP_STORE_CONNECT_KEY_CONTENT")) )'
+
       - name: Run Fastlane beta
         working-directory: ios
         env:
           APP_STORE_CONNECT_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
           APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
-          APP_STORE_CONNECT_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_KEY_CONTENT_BASE64 }}
+          ASC_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          ASC_KEY_FILE: fastlane/AuthKey.p8
         run: bundle exec fastlane beta

@@ -232,9 +232,7 @@ export default function ShareEditorScreen({
 
   const shareDestinations = useMemo(
     () => [
-      { id: 'whatsapp', label: 'WhatsApp', icon: 'logo-whatsapp' },
-      { id: 'instagram', label: 'Instagram', icon: 'logo-instagram' },
-      { id: 'facebook', label: 'Facebook', icon: 'logo-facebook' },
+      { id: 'system', label: 'Other apps', icon: 'share-outline' },
       { id: 'liquidSpirit', label: 'Liquid Spirit', icon: 'water-outline' },
     ],
     [],
