@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Dimensions,
-  Share,
+  Linking,
+  Share as NativeShare,
   StatusBar,
   StyleSheet,
   Text,
@@ -13,6 +14,7 @@ import {
   SafeAreaProvider,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
+import RNShare from 'react-native-share';
 import writingsManifest from './assets/generated/writings.json';
 import { authenticateLiquidSpirit } from './services/liquidSpiritAuth';
 import HomeScreen from './screens/HomeScreen';
@@ -552,12 +554,25 @@ function AppContent() {
     setCurrentScreen(nextScreen);
   };
 
-  const handleShareNow = async () => {
+  const handleShareNow = async payload => {
     if (!shareContext) {
       return;
     }
 
-    const { block, writingTitle, sectionTitle, passageText, sentences: cachedSentences } = shareContext;
+    const {
+      destination = 'system',
+      composedImageUri,
+      media,
+      text: editorShareText,
+    } = payload ?? {};
+
+    const {
+      block,
+      writingTitle,
+      sectionTitle,
+      passageText,
+      sentences: cachedSentences,
+    } = shareContext;
     const sectionLine = sectionTitle ? `, ${sectionTitle}` : '';
     const baseText =
       typeof passageText === 'string' ? passageText : getShareableBlockText(block);
@@ -567,7 +582,8 @@ function AppContent() {
     const sentenceTexts = parsedSentences.map(sentence =>
       typeof sentence === 'string' ? sentence : sentence?.text ?? '',
     );
-    const selectedBody = shareSelectedSentenceIndexes.length > 0
+
+    const selectedBodyFromState = shareSelectedSentenceIndexes.length > 0
       ? [...shareSelectedSentenceIndexes]
           .filter(
             index =>
@@ -581,14 +597,87 @@ function AppContent() {
           .filter(Boolean)
           .join('\n\n')
       : '';
-    const fallbackShareText = cleanBlockText(block?.shareText ?? baseText) || baseText || '';
-    const shareBody = selectedBody || fallbackShareText;
+    const fallbackShareText =
+      cleanBlockText(block?.shareText ?? baseText) || baseText || '';
+    const shareBody = (editorShareText && editorShareText.trim())
+      || selectedBodyFromState
+      || fallbackShareText;
     const message = `"${shareBody}"\n\n— ${writingTitle}${sectionLine}`;
 
+    const shareUrls = [];
+    let inferredType = null;
+
+    if (composedImageUri) {
+      shareUrls.push(composedImageUri);
+      inferredType = 'image/png';
+    } else if (media?.uri) {
+      shareUrls.push(media.uri);
+      inferredType = media.type ?? null;
+    }
+
+    const baseOptions = {
+      message,
+    };
+
+    if (shareUrls.length === 1) {
+      baseOptions.url = shareUrls[0];
+    }
+
+    if (shareUrls.length > 1) {
+      baseOptions.urls = shareUrls;
+    }
+
+    if (inferredType) {
+      baseOptions.type = inferredType;
+    }
+
+    const shareSingleWithFallback = async social => {
+      try {
+        await RNShare.shareSingle({ ...baseOptions, social });
+      } catch (error) {
+        if (error?.message && /not installed/i.test(error.message)) {
+          await NativeShare.share(baseOptions);
+          return;
+        }
+        throw error;
+      }
+    };
+
     try {
-      await Share.share({ message });
+      switch (destination) {
+        case 'whatsapp':
+          await shareSingleWithFallback(RNShare.Social.WHATSAPP);
+          break;
+        case 'instagram':
+          await shareSingleWithFallback(RNShare.Social.INSTAGRAM);
+          break;
+        case 'facebook':
+          await shareSingleWithFallback(RNShare.Social.FACEBOOK);
+          break;
+        case 'liquidSpirit': {
+          const encodedMessage = encodeURIComponent(message);
+          const url = `liquidspirit://share?text=${encodedMessage}`;
+          const supported = await Linking.canOpenURL(url);
+          if (!supported) {
+            Alert.alert(
+              'Liquid Spirit not installed',
+              'Install the Liquid Spirit app to share directly, or choose another share option.',
+            );
+            return;
+          }
+          await Linking.openURL(url);
+          break;
+        }
+        default:
+          await NativeShare.share(baseOptions);
+          break;
+      }
     } catch (error) {
       console.warn('Unable to share passage', error);
+      Alert.alert(
+        'Unable to share',
+        error?.message ?? 'We were unable to share this passage. Please try again later.',
+      );
     }
   };
 
@@ -751,7 +840,7 @@ function AppContent() {
     const message = `${header}\n\n${body}`;
 
     try {
-      await Share.share({ message });
+      await NativeShare.share({ message });
     } catch (error) {
       console.warn('Unable to share devotional program', error);
     }
@@ -1980,6 +2069,15 @@ const styles = StyleSheet.create({
     elevation: 10,
     alignSelf: 'center',
   },
+  sharePreviewOuterMedia: {
+    borderColor: 'transparent',
+  },
+  sharePreviewShot: {
+    width: '100%',
+    minHeight: 320,
+    borderRadius: 24,
+    overflow: 'hidden',
+  },
   sharePreviewCard: {
     width: '100%',
     minHeight: 320,
@@ -1989,6 +2087,31 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     justifyContent: 'space-between',
     alignSelf: 'stretch',
+  },
+  sharePreviewCardMedia: {
+    paddingVertical: 0,
+    paddingHorizontal: 0,
+    backgroundColor: '#000000',
+  },
+  sharePreviewMediaWrapper: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sharePreviewOverlayLayer: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.25)',
+  },
+  sharePreviewOverlayContent: {
+    ...StyleSheet.absoluteFillObject,
+    paddingVertical: 32,
+    paddingHorizontal: 28,
+    justifyContent: 'space-between',
+  },
+  sharePreviewVideo: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  sharePreviewImage: {
+    borderRadius: 24,
+    resizeMode: 'cover',
   },
   sharePreviewAccent: {
     position: 'absolute',
@@ -2218,6 +2341,77 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     minHeight: 140,
     maxHeight: 220,
+  },
+  shareMediaPanel: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  shareCaptureButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 14,
+    backgroundColor: '#c6a87d',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#b18d5c',
+  },
+  shareCaptureButtonDisabled: {
+    opacity: 0.6,
+  },
+  shareCaptureButtonIcon: {
+    marginRight: 8,
+  },
+  shareCaptureButtonLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
+  shareCaptureNotice: {
+    fontSize: 13,
+    color: '#6f5a35',
+    marginBottom: 12,
+  },
+  shareCapturePreview: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fdf8f2',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  shareCapturePreviewIcon: {
+    marginRight: 10,
+  },
+  shareCapturePreviewInfo: {
+    flex: 1,
+  },
+  shareCaptureFileLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  shareCaptureFileMeta: {
+    fontSize: 12,
+    color: '#6f5a35',
+    marginTop: 2,
+  },
+  shareCaptureResetButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#c6a87d',
+    backgroundColor: '#ffffff',
+  },
+  shareCaptureResetLabel: {
+    fontSize: 13,
+    color: '#6f5a35',
+    fontWeight: '600',
   },
   sharePaletteScroll: {
     maxHeight: 200,
@@ -2491,6 +2685,63 @@ const styles = StyleSheet.create({
     backgroundColor: '#e5d6be',
     borderColor: '#d5c3a5',
     opacity: 0.5,
+  },
+  shareDestinationBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.35)',
+    justifyContent: 'flex-end',
+  },
+  shareDestinationDismiss: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  shareDestinationSheet: {
+    backgroundColor: '#fdf8f2',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 24,
+    paddingTop: 20,
+    paddingBottom: 32,
+    borderTopWidth: 1,
+    borderColor: '#d7c5a8',
+  },
+  shareDestinationTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#3b2a15',
+    marginBottom: 16,
+  },
+  shareDestinationOptions: {
+    flexDirection: 'column',
+    marginBottom: 12,
+  },
+  shareDestinationOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#e6d9c4',
+  },
+  shareDestinationOptionIcon: {
+    marginRight: 12,
+  },
+  shareDestinationOptionLabel: {
+    fontSize: 15,
+    color: '#3b2a15',
+    fontWeight: '600',
+  },
+  shareDestinationCancel: {
+    marginTop: 12,
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#ffffff',
+  },
+  shareDestinationCancelLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#6f5a35',
   },
   contentScroll: {
     paddingBottom: 40,

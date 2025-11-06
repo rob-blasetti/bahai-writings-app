@@ -1,6 +1,24 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { Platform, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import {
+  Alert,
+  ImageBackground,
+  Modal,
+  Platform,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { launchCamera } from 'react-native-image-picker';
+import ViewShot from 'react-native-view-shot';
+import Video from 'react-native-video';
 import { extractPassageSentences, getShareableBlockText } from './shareUtils';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
@@ -27,6 +45,7 @@ export default function ShareEditorScreen({
   onSelectShareTheme,
   onShareNow,
 }) {
+  const viewShotRef = useRef(null);
   const passageText = useMemo(() => {
     if (typeof shareContext?.passageText === 'string') {
       return shareContext.passageText;
@@ -199,6 +218,37 @@ export default function ShareEditorScreen({
     layoutOptions[1]?.id ?? layoutOptions[0].id,
   );
   const [activeTool, setActiveTool] = useState('theme');
+  const [capturedMedia, setCapturedMedia] = useState(null);
+  const [isCapturingMedia, setIsCapturingMedia] = useState(false);
+  const [shareSheetVisible, setShareSheetVisible] = useState(false);
+
+  const capturedMediaIsVideo = useMemo(
+    () =>
+      typeof capturedMedia?.type === 'string'
+        ? capturedMedia.type.startsWith('video')
+        : false,
+    [capturedMedia?.type],
+  );
+
+  const shareDestinations = useMemo(
+    () => [
+      { id: 'whatsapp', label: 'WhatsApp', icon: 'logo-whatsapp' },
+      { id: 'instagram', label: 'Instagram', icon: 'logo-instagram' },
+      { id: 'facebook', label: 'Facebook', icon: 'logo-facebook' },
+      { id: 'liquidSpirit', label: 'Liquid Spirit', icon: 'water-outline' },
+    ],
+    [],
+  );
+
+  const viewShotOptions = useMemo(
+    () => ({
+      format: 'png',
+      quality: 0.92,
+      result: 'tmpfile',
+      fileName: 'bahai-writings-share',
+    }),
+    [],
+  );
 
   useEffect(() => {
     setFontId(fontOptions[0].id);
@@ -206,6 +256,7 @@ export default function ShareEditorScreen({
     setBackgroundId('theme');
     setLayoutId(layoutOptions[1]?.id ?? layoutOptions[0].id);
     setActiveTool('theme');
+    setCapturedMedia(null);
   }, [shareContext?.block?.id, fontOptions, layoutOptions]);
 
   useEffect(() => {
@@ -267,8 +318,129 @@ export default function ShareEditorScreen({
     ? baseParagraphStyle.lineHeight * (activeLayout.lineHeightScale ?? activeLayout.quoteScale ?? 1)
     : undefined;
 
+  const handleCaptureMedia = useCallback(async () => {
+    try {
+      setIsCapturingMedia(true);
+      const result = await launchCamera({
+        mediaType: 'mixed',
+        includeBase64: false,
+        videoQuality: 'high',
+        saveToPhotos: false,
+      });
+
+      if (result?.didCancel) {
+        return;
+      }
+
+      if (result?.errorCode) {
+        throw new Error(result.errorMessage || result.errorCode);
+      }
+
+      const asset = Array.isArray(result?.assets) ? result.assets[0] : null;
+
+      if (!asset?.uri) {
+        throw new Error('No media was captured.');
+      }
+
+      setCapturedMedia({
+        uri: asset.uri,
+        type: asset.type ?? (asset.duration ? 'video/mp4' : 'image/jpeg'),
+        duration: asset.duration ?? null,
+        fileName: asset.fileName ?? null,
+      });
+    } catch (error) {
+      console.warn('Unable to capture media for sharing', error);
+      Alert.alert(
+        'Camera unavailable',
+        error?.message ??
+          'We could not open the camera. Please check your permissions and try again.',
+      );
+    } finally {
+      setIsCapturingMedia(false);
+    }
+  }, []);
+
+  const handleResetMedia = useCallback(() => {
+    setCapturedMedia(null);
+  }, []);
+
+  const handleOpenShareSheet = useCallback(() => {
+    if (!hasSelection) {
+      Alert.alert(
+        'Select sentences first',
+        'Choose at least one sentence to include before sharing.',
+      );
+      return;
+    }
+
+    setShareSheetVisible(true);
+  }, [hasSelection]);
+
+  const handleCloseShareSheet = useCallback(() => {
+    setShareSheetVisible(false);
+  }, []);
+
+  const handleShareToDestination = useCallback(
+    async destinationId => {
+      if (!destinationId) {
+        return;
+      }
+
+      let composedImageUri = null;
+
+      if (viewShotRef.current?.capture) {
+        try {
+          composedImageUri = await viewShotRef.current.capture(viewShotOptions);
+        } catch (error) {
+          console.warn('Unable to capture share preview', error);
+          composedImageUri = null;
+        }
+      }
+
+      onShareNow?.({
+        destination: destinationId,
+        writingTitle: shareContext?.writingTitle,
+        sectionTitle: shareContext?.sectionTitle,
+        text: shareText,
+        composedImageUri,
+        media:
+          capturedMedia && capturedMedia.uri
+            ? {
+                uri: capturedMedia.uri,
+                type: capturedMedia.type ?? null,
+                duration: capturedMedia.duration ?? null,
+              }
+            : null,
+        theme: {
+          id: shareThemeId,
+          textColor: activeTextColor,
+          backgroundColor: activeBackground.backgroundColor,
+          borderColor: activeBackground.borderColor,
+          fontId,
+          layoutId,
+        },
+      });
+
+      setShareSheetVisible(false);
+    },
+    [
+      activeBackground.backgroundColor,
+      activeBackground.borderColor,
+      activeTextColor,
+      capturedMedia,
+      fontId,
+      layoutId,
+      onShareNow,
+      shareContext,
+      shareText,
+      shareThemeId,
+      viewShotOptions,
+    ],
+  );
+
   const paletteTabs = useMemo(
     () => [
+      { id: 'media', label: 'Camera', icon: 'camera-outline' },
       { id: 'theme', label: 'Theme', icon: 'color-palette-outline' },
       { id: 'font', label: 'Font', icon: 'text-outline' },
       { id: 'textColor', label: 'Text color', icon: 'color-fill-outline' },
@@ -280,6 +452,68 @@ export default function ShareEditorScreen({
 
   const renderPaletteContent = () => {
     switch (activeTool) {
+      case 'media':
+        return (
+          <View style={styles.shareMediaPanel}>
+            <TouchableOpacity
+              onPress={handleCaptureMedia}
+              style={[
+                styles.shareCaptureButton,
+                isCapturingMedia && styles.shareCaptureButtonDisabled,
+              ]}
+              disabled={isCapturingMedia}
+              accessibilityRole="button"
+            >
+              <Ionicons
+                name={capturedMediaIsVideo ? 'videocam-outline' : 'camera-outline'}
+                size={20}
+                color="#ffffff"
+                style={styles.shareCaptureButtonIcon}
+              />
+              <Text style={styles.shareCaptureButtonLabel}>
+                {isCapturingMedia
+                  ? 'Opening camera…'
+                  : capturedMedia
+                  ? 'Retake photo or video'
+                  : 'Take photo or video'}
+              </Text>
+            </TouchableOpacity>
+            <Text style={styles.shareCaptureNotice}>
+              Use your device camera to capture a background image or clip. Your
+              selected passage will be layered on top.
+            </Text>
+            {capturedMedia ? (
+              <View style={styles.shareCapturePreview}>
+                <Ionicons
+                  name={capturedMediaIsVideo ? 'film-outline' : 'image-outline'}
+                  size={20}
+                  color="#3b2a15"
+                  style={styles.shareCapturePreviewIcon}
+                />
+                <View style={styles.shareCapturePreviewInfo}>
+                  <Text style={styles.shareCaptureFileLabel}>
+                    {capturedMedia.fileName ||
+                      (capturedMediaIsVideo
+                        ? 'Video clip'
+                        : 'Photo background')}
+                  </Text>
+                  {capturedMedia.duration ? (
+                    <Text style={styles.shareCaptureFileMeta}>
+                      {Math.round(capturedMedia.duration)}s clip
+                    </Text>
+                  ) : null}
+                </View>
+                <TouchableOpacity
+                  onPress={handleResetMedia}
+                  style={styles.shareCaptureResetButton}
+                  accessibilityRole="button"
+                >
+                  <Text style={styles.shareCaptureResetLabel}>Remove</Text>
+                </TouchableOpacity>
+              </View>
+            ) : null}
+          </View>
+        );
       case 'theme':
         return (
           <ScrollView
@@ -433,6 +667,68 @@ export default function ShareEditorScreen({
     }
   };
 
+  const previewQuoteStyle = [
+    styles.sharePreviewQuote,
+    baseParagraphStyle,
+    activeLayout.quoteStyle,
+    activeFont.style,
+    {
+      color: activeTextColor,
+      fontSize: calculatedQuoteSize,
+      lineHeight: calculatedQuoteLineHeight,
+    },
+  ];
+
+  const previewAttribution = (
+    <View style={styles.sharePreviewAttribution}>
+      <View
+        style={[
+          styles.sharePreviewDivider,
+          { backgroundColor: activeTextColor },
+        ]}
+      />
+      <Text
+        style={[
+          styles.sharePreviewAuthor,
+          activeLayout.authorStyle,
+          { color: activeTextColor },
+        ]}
+      >
+        — {shareContext?.writingTitle}
+      </Text>
+      {shareContext?.sectionTitle ? (
+        <Text
+          style={[
+            styles.sharePreviewSection,
+            activeLayout.authorStyle,
+            { color: activeTextColor },
+          ]}
+        >
+          {shareContext.sectionTitle}
+        </Text>
+      ) : null}
+    </View>
+  );
+
+  const previewFooter = (
+    <View style={styles.sharePreviewFooter}>
+      <View
+        style={[
+          styles.sharePreviewFooterLine,
+          { backgroundColor: activeTextColor },
+        ]}
+      />
+      <Text
+        style={[
+          styles.sharePreviewFooterLabel,
+          { color: activeTextColor },
+        ]}
+      >
+        Bahai Writings
+      </Text>
+    </View>
+  );
+
   return (
     <View style={styles.screenSurface}>
       <NavigationTopBar
@@ -456,103 +752,105 @@ export default function ShareEditorScreen({
           Craft a beautiful moment before you send this inspiration to someone you love.
         </Text>
       </View>
+      {typeof onChangeSelection === 'function' ? (
+        <TouchableOpacity
+          onPress={onChangeSelection}
+          style={styles.shareChangeSelectionButton}
+          accessibilityRole="button"
+        >
+          <Text style={styles.shareChangeSelectionLabel}>Adjust selection</Text>
+        </TouchableOpacity>
+      ) : null}
       <View style={styles.shareEditorBody}>
         <View style={styles.sharePreviewWrapper}>
           <View
             style={[
               styles.sharePreviewOuter,
-              { borderColor: activeBackground.borderColor },
+              capturedMedia
+                ? styles.sharePreviewOuterMedia
+                : { borderColor: activeBackground.borderColor },
             ]}
           >
-            <View
-              style={[
-                styles.sharePreviewCard,
-                { backgroundColor: activeBackground.backgroundColor },
-              ]}
+            <ViewShot
+              ref={viewShotRef}
+              style={styles.sharePreviewShot}
+              options={viewShotOptions}
             >
-              <View
-                style={[
-                  styles.sharePreviewAccent,
-                  { backgroundColor: activeBackground.borderColor },
-                ]}
-              />
-              <View
-                style={[
-                  styles.sharePreviewAccentSecondary,
-                  { backgroundColor: activeBackground.borderColor },
-                ]}
-              />
-              <View style={[styles.sharePreviewContent, activeLayout.contentStyle]}>
-                <Text
-                  style={[
-                    styles.sharePreviewQuote,
-                    baseParagraphStyle,
-                    activeLayout.quoteStyle,
-                    activeFont.style,
-                    {
-                      color: activeTextColor,
-                      fontSize: calculatedQuoteSize,
-                      lineHeight: calculatedQuoteLineHeight,
-                    },
-                  ]}
+              {capturedMedia ? (
+                <View
+                  style={[styles.sharePreviewCard, styles.sharePreviewCardMedia]}
                 >
-                  {shareText || 'Select sentences to preview.'}
-                </Text>
-                <View style={styles.sharePreviewAttribution}>
+                  {capturedMediaIsVideo ? (
+                    <View style={styles.sharePreviewMediaWrapper}>
+                      <Video
+                        source={{ uri: capturedMedia.uri }}
+                        style={styles.sharePreviewVideo}
+                        resizeMode="cover"
+                        repeat
+                        muted
+                      />
+                      <View style={styles.sharePreviewOverlayLayer} />
+                    </View>
+                  ) : (
+                    <ImageBackground
+                      source={{ uri: capturedMedia.uri }}
+                      style={styles.sharePreviewMediaWrapper}
+                      imageStyle={styles.sharePreviewImage}
+                    >
+                      <View style={styles.sharePreviewOverlayLayer} />
+                    </ImageBackground>
+                  )}
                   <View
                     style={[
-                      styles.sharePreviewDivider,
-                      { backgroundColor: activeTextColor },
-                    ]}
-                  />
-                  <Text
-                    style={[
-                      styles.sharePreviewAuthor,
-                      activeLayout.authorStyle,
-                      { color: activeTextColor },
+                      styles.sharePreviewOverlayContent,
+                      activeLayout.contentStyle,
                     ]}
                   >
-                    — {shareContext?.writingTitle}
-                  </Text>
-                  {shareContext?.sectionTitle ? (
-                    <Text
-                      style={[
-                        styles.sharePreviewSection,
-                        activeLayout.authorStyle,
-                        { color: activeTextColor },
-                      ]}
-                    >
-                      {shareContext.sectionTitle}
+                    <Text style={previewQuoteStyle}>
+                      {shareText || 'Select sentences to preview.'}
                     </Text>
-                  ) : null}
+                    {previewAttribution}
+                    {previewFooter}
+                  </View>
                 </View>
-              </View>
-              <View style={styles.sharePreviewFooter}>
+              ) : (
                 <View
                   style={[
-                    styles.sharePreviewFooterLine,
-                    { backgroundColor: activeTextColor },
-                  ]}
-                />
-                <Text
-                  style={[
-                    styles.sharePreviewFooterLabel,
-                    { color: activeTextColor },
+                    styles.sharePreviewCard,
+                    { backgroundColor: activeBackground.backgroundColor },
                   ]}
                 >
-                  Bahai Writings
-                </Text>
-              </View>
-            </View>
+                  <View
+                    style={[
+                      styles.sharePreviewAccent,
+                      { backgroundColor: activeBackground.borderColor },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.sharePreviewAccentSecondary,
+                      { backgroundColor: activeBackground.borderColor },
+                    ]}
+                  />
+                  <View
+                    style={[
+                      styles.sharePreviewContent,
+                      activeLayout.contentStyle,
+                    ]}
+                  >
+                    <Text style={previewQuoteStyle}>
+                      {shareText || 'Select sentences to preview.'}
+                    </Text>
+                    {previewAttribution}
+                  </View>
+                  {previewFooter}
+                </View>
+              )}
+            </ViewShot>
           </View>
         </View>
       </View>
-      <View style={styles.shareToolbar}>
-        <View style={styles.shareToolbarTabs}>
-          {paletteTabs.map(tab => {
-            const isActive = tab.id === activeTool;
-            return (
-              <TouchableOpacity
+      <TouchableOpacity
                 key={tab.id}
                 onPress={() => setActiveTool(tab.id)}
                 style={[
@@ -576,17 +874,61 @@ export default function ShareEditorScreen({
         <View style={styles.shareToolbarContent}>{renderPaletteContent()}</View>
       </View>
       <TouchableOpacity
-        onPress={onShareNow}
+        onPress={handleOpenShareSheet}
         style={[
           styles.shareFloatingButton,
-          !hasSelection && styles.shareFloatingButtonDisabled,
+          (!hasSelection || isCapturingMedia) && styles.shareFloatingButtonDisabled,
         ]}
         accessibilityRole="button"
-        accessibilityLabel="Share passage"
-        disabled={!hasSelection}
+        accessibilityLabel="Choose where to share"
+        disabled={!hasSelection || isCapturingMedia}
       >
         <Ionicons name="share-outline" size={24} color="#ffffff" />
       </TouchableOpacity>
+      <Modal
+        visible={shareSheetVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={handleCloseShareSheet}
+      >
+        <View style={styles.shareDestinationBackdrop}>
+          <TouchableOpacity
+            style={styles.shareDestinationDismiss}
+            accessibilityRole="button"
+            onPress={handleCloseShareSheet}
+          />
+          <View style={styles.shareDestinationSheet}>
+            <Text style={styles.shareDestinationTitle}>Share to…</Text>
+            <View style={styles.shareDestinationOptions}>
+              {shareDestinations.map(destination => (
+                <TouchableOpacity
+                  key={destination.id}
+                  onPress={() => handleShareToDestination(destination.id)}
+                  style={styles.shareDestinationOption}
+                  accessibilityRole="button"
+                >
+                  <Ionicons
+                    name={destination.icon}
+                    size={22}
+                    color="#3b2a15"
+                    style={styles.shareDestinationOptionIcon}
+                  />
+                  <Text style={styles.shareDestinationOptionLabel}>
+                    {destination.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <TouchableOpacity
+              onPress={handleCloseShareSheet}
+              style={styles.shareDestinationCancel}
+              accessibilityRole="button"
+            >
+              <Text style={styles.shareDestinationCancelLabel}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
