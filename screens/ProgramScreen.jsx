@@ -1,13 +1,167 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
+  Modal,
+  Pressable,
+  ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+
+function ProgramThemeGenerator({ styles, onOpen, feedback }) {
+  return (
+    <View style={styles.programThemeSection}>
+      <Text style={styles.programThemeTitle}>Generate by theme</Text>
+      <Text style={styles.programThemeDescription}>
+        Search the library for passages that match a theme and add them to your
+        devotional in a single step.
+      </Text>
+      <TouchableOpacity onPress={onOpen} style={styles.programThemeButton}>
+        <Text style={styles.programThemeButtonLabel}>Find themed sections</Text>
+      </TouchableOpacity>
+      {feedback ? (
+        <Text style={styles.programThemeFeedback}>{feedback}</Text>
+      ) : null}
+    </View>
+  );
+}
+
+function ProgramThemeModal({
+  styles,
+  visible,
+  onClose,
+  themeQuery,
+  onChangeThemeQuery,
+  onSearchTheme,
+  isSearching,
+  searchMessage,
+  searchResults,
+  selectedSectionIds,
+  onToggleSection,
+  onAddSelected,
+}) {
+  const hasResults = Array.isArray(searchResults) && searchResults.length > 0;
+  const selectionIds = Array.isArray(selectedSectionIds)
+    ? selectedSectionIds
+    : [];
+  const hasSelection = selectionIds.length > 0;
+
+  return (
+    <Modal
+      visible={visible}
+      animationType="fade"
+      transparent
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.programModalBackdrop} onPress={onClose}>
+        <Pressable
+          style={styles.programModalCard}
+          onPress={() => {}}
+          accessibilityViewIsModal
+        >
+          <Text style={styles.programModalTitle}>Generate by theme</Text>
+          <Text style={styles.programModalDescription}>
+            Enter a keyword to find sections related to your theme. Select the
+            sections you want to add to your devotional.
+          </Text>
+          <TextInput
+            value={themeQuery}
+            onChangeText={onChangeThemeQuery}
+            placeholder="e.g. unity, joy, detachment"
+            placeholderTextColor="#b8a58b"
+            style={[styles.programTextInput, styles.programModalInput]}
+            autoCapitalize="none"
+            autoCorrect={false}
+            returnKeyType="search"
+            onSubmitEditing={onSearchTheme}
+          />
+          <View style={styles.programModalSearchRow}>
+            <TouchableOpacity
+              onPress={onSearchTheme}
+              style={styles.programModalButton}
+              disabled={isSearching}
+            >
+              {isSearching ? (
+                <ActivityIndicator color="#3b2a15" />
+              ) : (
+                <Text style={styles.programModalButtonLabel}>Search</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          {searchMessage ? (
+            <Text style={styles.programModalMessage}>{searchMessage}</Text>
+          ) : null}
+          <ScrollView
+            style={styles.programModalResults}
+            contentContainerStyle={styles.programModalResultsContent}
+            keyboardShouldPersistTaps="handled"
+          >
+            {hasResults
+              ? searchResults.map(result => {
+                  const isSelected = selectionIds.includes(result.id);
+                  return (
+                    <TouchableOpacity
+                      key={result.id}
+                      onPress={() => onToggleSection(result.id)}
+                      style={[
+                        styles.programModalResult,
+                        isSelected && styles.programModalResultSelected,
+                      ]}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isSelected }}
+                    >
+                      <Text style={styles.programModalResultTitle}>
+                        {result.sectionTitle}
+                      </Text>
+                      <Text style={styles.programModalResultWriting}>
+                        {result.writingTitle}
+                      </Text>
+                      {result.preview ? (
+                        <Text style={styles.programModalResultPreview}>
+                          {result.preview}
+                        </Text>
+                      ) : null}
+                      <Text style={styles.programModalResultToggle}>
+                        {isSelected
+                          ? 'Included in devotional'
+                          : 'Tap to include this section'}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })
+              : null}
+          </ScrollView>
+          <View style={styles.programModalActions}>
+            <TouchableOpacity
+              onPress={onClose}
+              style={styles.programModalButton}
+            >
+              <Text style={styles.programModalButtonLabel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={onAddSelected}
+              style={[
+                styles.programModalButton,
+                styles.programModalActionSpacing,
+                styles.programModalButtonPrimary,
+                (!hasSelection || isSearching) && styles.buttonDisabled,
+              ]}
+              disabled={!hasSelection || isSearching}
+            >
+              <Text style={styles.programModalButtonPrimaryLabel}>
+                Add selected sections
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </Pressable>
+      </Pressable>
+    </Modal>
+  );
+}
 
 function ProgramPassageCard({ styles, item, index, renderBlockContent, onRemove }) {
   return (
@@ -156,7 +310,123 @@ export default function ProgramScreen({
   programSubmissionSuccess,
   isSubmittingProgram,
   onRemoveFromProgram,
+  onSearchProgramTheme,
+  onAddProgramSections,
 }) {
+  const [isThemeModalVisible, setIsThemeModalVisible] = useState(false);
+  const [themeQuery, setThemeQuery] = useState('');
+  const [themeSearchResults, setThemeSearchResults] = useState([]);
+  const [selectedThemeSectionIds, setSelectedThemeSectionIds] = useState([]);
+  const [isSearchingTheme, setIsSearchingTheme] = useState(false);
+  const [themeSearchMessage, setThemeSearchMessage] = useState(null);
+  const [themeFeedback, setThemeFeedback] = useState(null);
+
+  const selectedSections = useMemo(
+    () =>
+      themeSearchResults.filter(result =>
+        selectedThemeSectionIds.includes(result.id),
+      ),
+    [themeSearchResults, selectedThemeSectionIds],
+  );
+
+  const handleOpenThemeModal = useCallback(() => {
+    setIsThemeModalVisible(true);
+    setThemeQuery('');
+    setThemeSearchResults([]);
+    setSelectedThemeSectionIds([]);
+    setThemeSearchMessage(null);
+  }, []);
+
+  const handleCloseThemeModal = useCallback(() => {
+    setIsThemeModalVisible(false);
+  }, []);
+
+  const handleSearchTheme = useCallback(() => {
+    if (typeof onSearchProgramTheme !== 'function') {
+      return;
+    }
+
+    const trimmedQuery = themeQuery.trim();
+
+    if (trimmedQuery.length === 0) {
+      setThemeSearchResults([]);
+      setSelectedThemeSectionIds([]);
+      setThemeSearchMessage('Enter a theme to start searching.');
+      return;
+    }
+
+    setIsSearchingTheme(true);
+
+    try {
+      const results = onSearchProgramTheme(trimmedQuery) ?? [];
+
+      if (!Array.isArray(results) || results.length === 0) {
+        setThemeSearchResults([]);
+        setSelectedThemeSectionIds([]);
+        setThemeSearchMessage(
+          `No sections found for “${trimmedQuery}”. Try another theme.`,
+        );
+        return;
+      }
+
+      setThemeSearchResults(results);
+      setSelectedThemeSectionIds(results.map(result => result.id));
+      setThemeSearchMessage(
+        results.length === 1
+          ? '1 section matches this theme.'
+          : `${results.length} sections match this theme.`,
+      );
+    } catch (error) {
+      console.warn('Program theme search failed', error);
+      setThemeSearchResults([]);
+      setSelectedThemeSectionIds([]);
+      setThemeSearchMessage(
+        'Something went wrong while searching. Please try again.',
+      );
+    } finally {
+      setIsSearchingTheme(false);
+    }
+  }, [onSearchProgramTheme, themeQuery]);
+
+  const handleToggleThemeSection = useCallback(sectionId => {
+    setSelectedThemeSectionIds(previous => {
+      if (previous.includes(sectionId)) {
+        return previous.filter(id => id !== sectionId);
+      }
+      return [...previous, sectionId];
+    });
+  }, []);
+
+  const handleAddSelectedSections = useCallback(() => {
+    if (!Array.isArray(selectedSections) || selectedSections.length === 0) {
+      setThemeSearchMessage('Select at least one section to add.');
+      return;
+    }
+
+    if (typeof onAddProgramSections !== 'function') {
+      return;
+    }
+
+    const addedCount = onAddProgramSections(selectedSections);
+    const sectionCount = selectedSections.length;
+    const trimmedQuery = themeQuery.trim();
+
+    if (addedCount > 0) {
+      const passageLabel = addedCount === 1 ? 'passage' : 'passages';
+      const sectionLabel = sectionCount === 1 ? 'section' : 'sections';
+      const queryLabel = trimmedQuery.length > 0 ? ` “${trimmedQuery}”` : '';
+      setThemeFeedback(
+        `Added ${addedCount} ${passageLabel} from ${sectionCount} ${sectionLabel}${queryLabel}.`,
+      );
+    } else {
+      setThemeFeedback(
+        'Those sections are already part of your devotional. Try another theme.',
+      );
+    }
+
+    setIsThemeModalVisible(false);
+  }, [onAddProgramSections, selectedSections, themeQuery]);
+
   const renderProgramPassage = useCallback(
     ({ item, index }) => (
       <ProgramPassageCard
@@ -171,13 +441,20 @@ export default function ProgramScreen({
   );
 
   const listHeaderComponent = (
-    <ProgramForm
-      styles={styles}
-      programTitle={programTitle}
-      onChangeProgramTitle={onChangeProgramTitle}
-      programNotes={programNotes}
-      onChangeProgramNotes={onChangeProgramNotes}
-    />
+    <View>
+      <ProgramThemeGenerator
+        styles={styles}
+        onOpen={handleOpenThemeModal}
+        feedback={themeFeedback}
+      />
+      <ProgramForm
+        styles={styles}
+        programTitle={programTitle}
+        onChangeProgramTitle={onChangeProgramTitle}
+        programNotes={programNotes}
+        onChangeProgramNotes={onChangeProgramNotes}
+      />
+    </View>
   );
 
   const listFooterComponent = (
@@ -196,6 +473,20 @@ export default function ProgramScreen({
 
   return (
     <View style={styles.screenSurface}>
+      <ProgramThemeModal
+        styles={styles}
+        visible={isThemeModalVisible}
+        onClose={handleCloseThemeModal}
+        themeQuery={themeQuery}
+        onChangeThemeQuery={setThemeQuery}
+        onSearchTheme={handleSearchTheme}
+        isSearching={isSearchingTheme}
+        searchMessage={themeSearchMessage}
+        searchResults={themeSearchResults}
+        selectedSectionIds={selectedThemeSectionIds}
+        onToggleSection={handleToggleThemeSection}
+        onAddSelected={handleAddSelectedSections}
+      />
       <NavigationTopBar
         styles={styles}
         onBack={onClose}
