@@ -183,7 +183,10 @@ function ProgramPassageCard({ styles, item, index, renderBlockContent, onRemove 
         </TouchableOpacity>
       </View>
       <View style={styles.blockWrapper}>
-        {renderBlockContent(item.block, 0)}
+        {renderBlockContent(item.block, 0, {
+          writingTitle: item.writingTitle,
+          sectionTitle: item.sectionTitle,
+        })}
       </View>
     </View>
   );

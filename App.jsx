@@ -8,6 +8,7 @@ import {
   StatusBar,
   StyleSheet,
   Text,
+  TouchableOpacity,
   useColorScheme,
   View,
 } from 'react-native';
@@ -29,6 +30,7 @@ import SectionScreen from './screens/SectionScreen';
 import PassageScreen from './screens/PassageScreen';
 import UnavailableScreen from './screens/UnavailableScreen';
 import { extractPassageSentences, getShareableBlockText } from './screens/shareUtils';
+import ReflectionModal from './components/ReflectionModal';
 
 const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
@@ -646,6 +648,8 @@ function AppContent() {
   const [isSubmittingProgram, setIsSubmittingProgram] = useState(false);
   const [programSubmissionError, setProgramSubmissionError] = useState(null);
   const [programSubmissionSuccess, setProgramSubmissionSuccess] = useState(null);
+  const [reflectionModalContext, setReflectionModalContext] = useState(null);
+  const [reflectionInput, setReflectionInput] = useState('');
   const [sectionBlockIndex, setSectionBlockIndex] = useState(0);
   const sectionPagerRef = useRef(null);
   const sectionViewabilityConfig = useRef({
@@ -817,6 +821,49 @@ function AppContent() {
     setShareSelectedSentenceIndexes(defaultSelection);
     setCurrentScreen('shareSelect');
   };
+
+  const handleShowReflectionModal = useCallback(
+    ({ block, writingTitle, sectionTitle }) => {
+      if (!block) {
+        return;
+      }
+      const blockText =
+        typeof block.text === 'string' ? block.text.trim() : '';
+      if (blockText.length === 0) {
+        return;
+      }
+      setReflectionModalContext({
+        blockId: block.sourceId ?? block.id ?? null,
+        blockText,
+        writingTitle: writingTitle ?? null,
+        sectionTitle: sectionTitle ?? null,
+      });
+      setReflectionInput('');
+    },
+    [],
+  );
+
+  const handleCloseReflectionModal = useCallback(() => {
+    setReflectionModalContext(null);
+    setReflectionInput('');
+  }, []);
+
+  const handleSubmitReflection = useCallback(() => {
+    if (!reflectionModalContext) {
+      return;
+    }
+    const trimmed = reflectionInput.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    console.log('[Reflection] submitted', {
+      blockId: reflectionModalContext.blockId,
+      writingTitle: reflectionModalContext.writingTitle,
+      sectionTitle: reflectionModalContext.sectionTitle,
+      textLength: trimmed.length,
+    });
+    handleCloseReflectionModal();
+  }, [handleCloseReflectionModal, reflectionInput, reflectionModalContext]);
 
   const handleContinueAsGuest = () => {
     setAuthenticatedUser(null);
@@ -1490,8 +1537,42 @@ function AppContent() {
 
   const hasPassages = availablePassages.length > 0;
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
+  const isReflectionModalVisible = Boolean(reflectionModalContext);
 
-  const renderBlockContent = (block, index) => {
+  const renderBlockContent = (block, index, options = {}) => {
+    if (!block) {
+      return null;
+    }
+    const { writingTitle = null, sectionTitle = null } = options;
+    const normalizedBlockText =
+      typeof block.text === 'string' ? block.text.trim() : '';
+    const canOpenReflection = normalizedBlockText.length > 0;
+
+    const wrapBlock = (
+      children,
+      wrapperStyle = [styles.blockContainer, index === 0 && styles.firstBlock],
+    ) => {
+      const styleArray = wrapperStyle.filter(Boolean);
+      if (canOpenReflection) {
+        return (
+          <TouchableOpacity
+            style={styleArray}
+            activeOpacity={0.85}
+            onPress={() =>
+              handleShowReflectionModal({
+                block,
+                writingTitle,
+                sectionTitle,
+              })
+            }
+          >
+            {children}
+          </TouchableOpacity>
+        );
+      }
+      return <View style={styleArray}>{children}</View>;
+    };
+
     const renderTextWithNumber = ({
       text,
       style,
@@ -1596,71 +1677,58 @@ function AppContent() {
 
     if (block.type === 'quote') {
       const meta = renderMeta();
-      return (
-        <View style={styles.blockContainer}>
-          <View
-            style={[styles.quoteBlock, index === 0 && styles.firstBlock]}
-          >
-            <Text
-              style={[styles.quoteText, scaledTypography.quoteText]}
-            >
+      return wrapBlock(
+        <>
+          <View style={[styles.quoteBlock, index === 0 && styles.firstBlock]}>
+            <Text style={[styles.quoteText, scaledTypography.quoteText]}>
               {block.text}
             </Text>
           </View>
           {meta}
-        </View>
+        </>,
+        [styles.blockContainer],
       );
     }
 
     if (block.type === 'poetry') {
       const meta = renderMeta();
-      return (
-        <View style={styles.blockContainer}>
-          <View
-            style={[styles.poetryBlock, index === 0 && styles.firstBlock]}
-          >
-            {block.text.split('\n').map((line, lineIndex) => (
+      return wrapBlock(
+        <>
+          <View style={[styles.poetryBlock, index === 0 && styles.firstBlock]}>
+            {block.text.split('\n').map((line, lineIndex) =>
               renderTextWithNumber({
                 key: `${block.id}-line-${lineIndex}`,
                 text: line,
-                style: [
-                  styles.poetryLine,
-                  scaledTypography.poetryLine,
-                ],
-              })
-            ))}
+                style: [styles.poetryLine, scaledTypography.poetryLine],
+              }),
+            )}
           </View>
           {meta}
-        </View>
+        </>,
       );
     }
 
     if (block.type === 'list') {
       const meta = renderMeta();
-      return (
-        <View style={styles.blockContainer}>
-          <View
-            style={[styles.listBlock, index === 0 && styles.firstBlock]}
-          >
-            {block.text.split('\n').map((line, lineIndex) => (
+      return wrapBlock(
+        <>
+          <View style={[styles.listBlock, index === 0 && styles.firstBlock]}>
+            {block.text.split('\n').map((line, lineIndex) =>
               renderTextWithNumber({
                 key: `${block.id}-item-${lineIndex}`,
                 text: line,
-                style: [
-                  styles.listItemText,
-                  scaledTypography.listItemText,
-                ],
-              })
-            ))}
+                style: [styles.listItemText, scaledTypography.listItemText],
+              }),
+            )}
           </View>
           {meta}
-        </View>
+        </>,
       );
     }
 
     const meta = renderMeta();
-    return (
-      <View style={[styles.blockContainer, index === 0 && styles.firstBlock]}>
+    return wrapBlock(
+      <>
         {block.text
           ? renderTextWithNumber({
               text: block.text,
@@ -1672,7 +1740,7 @@ function AppContent() {
             })
           : null}
         {meta}
-      </View>
+      </>,
     );
   };
 
@@ -1961,6 +2029,15 @@ function AppContent() {
       ]}
     >
       {screenContent}
+      <ReflectionModal
+        visible={isReflectionModalVisible}
+        styles={styles}
+        context={reflectionModalContext}
+        inputValue={reflectionInput}
+        onChangeInput={setReflectionInput}
+        onCancel={handleCloseReflectionModal}
+        onSubmit={handleSubmitReflection}
+      />
     </View>
   );
 }
@@ -2068,6 +2145,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#2c1f0c',
     marginBottom: 12,
+  },
+  authPasswordInputContainer: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 14,
+    backgroundColor: '#fffdf8',
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: 6,
+    marginBottom: 12,
+  },
+  authPasswordInput: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: '#2c1f0c',
+  },
+  authPasswordToggle: {
+    paddingHorizontal: 6,
+    paddingVertical: 6,
   },
   homeContainer: {
     flex: 1,
@@ -2606,6 +2704,100 @@ const styles = StyleSheet.create({
     color: '#3b2a15',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
+  },
+  reflectionModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(43, 27, 10, 0.65)',
+    justifyContent: 'center',
+    paddingHorizontal: 24,
+  },
+  reflectionModalCard: {
+    backgroundColor: '#fffdf8',
+    borderRadius: 24,
+    padding: 20,
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  reflectionModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2c1f0c',
+    marginBottom: 4,
+  },
+  reflectionModalMeta: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginBottom: 16,
+  },
+  reflectionModalPassageLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#6f5a35',
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    marginBottom: 6,
+  },
+  reflectionModalPassageScroll: {
+    maxHeight: 180,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e6d9c4',
+    backgroundColor: '#fffaf3',
+    marginBottom: 16,
+  },
+  reflectionModalPassageContent: {
+    padding: 12,
+  },
+  reflectionModalPassageText: {
+    fontSize: 15,
+    lineHeight: 24,
+    color: '#3b2a15',
+  },
+  reflectionModalInput: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 96,
+    fontSize: 15,
+    color: '#3b2a15',
+  },
+  reflectionModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 16,
+  },
+  reflectionModalButtonSecondary: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#ffffff',
+    marginRight: 12,
+  },
+  reflectionModalButtonSecondaryLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6f5a35',
+  },
+  reflectionModalButtonPrimary: {
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 14,
+    backgroundColor: '#6d9c7c',
+    borderWidth: 1,
+    borderColor: '#598467',
+  },
+  reflectionModalButtonPrimaryLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
   },
   actionChipRow: {
     flexDirection: 'row',

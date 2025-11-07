@@ -33,7 +33,10 @@ export default function SectionScreen({
           nestedScrollEnabled
         >
           <View style={styles.sectionPagerBlock}>
-            {renderBlockContent(item, index)}
+            {renderBlockContent(item, index, {
+              writingTitle: selectedWriting.title,
+              sectionTitle: selectedSection.title,
+            })}
           </View>
         </ScrollView>
         <View style={[styles.sectionPagerFooter, styles.actionChipRow]}>

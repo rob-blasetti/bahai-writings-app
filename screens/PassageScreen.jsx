@@ -86,7 +86,10 @@ export default function PassageScreen({
       <ScrollView contentContainerStyle={styles.contentScroll}>
         <View style={styles.passageCard}>
           <View style={styles.blockWrapper}>
-            {renderBlockContent(randomPassage.block, 0)}
+            {renderBlockContent(randomPassage.block, 0, {
+              writingTitle: randomPassage.writingTitle,
+              sectionTitle: randomPassage.sectionTitle,
+            })}
             <View style={styles.actionChipRow}>
               <TouchableOpacity
                 onPress={() =>

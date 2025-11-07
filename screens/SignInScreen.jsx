@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   ActivityIndicator,
   Text,
@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 
 export default function SignInScreen({
   styles,
@@ -19,6 +20,8 @@ export default function SignInScreen({
   onSignIn,
   onCancel,
 }) {
+  const [isPasswordVisible, setPasswordVisible] = useState(false);
+
   return (
     <View style={styles.screenSurface}>
       <NavigationTopBar
@@ -45,16 +48,33 @@ export default function SignInScreen({
           placeholderTextColor="#9b8a6a"
           editable={!isAuthenticating}
         />
-        <TextInput
-          value={authPassword}
-          onChangeText={onChangePassword}
-          style={styles.authInput}
-          placeholder="Password"
-          secureTextEntry
-          textContentType="password"
-          placeholderTextColor="#9b8a6a"
-          editable={!isAuthenticating}
-        />
+        <View style={styles.authPasswordInputContainer}>
+          <TextInput
+            value={authPassword}
+            onChangeText={onChangePassword}
+            style={styles.authPasswordInput}
+            placeholder="Password"
+            secureTextEntry={!isPasswordVisible}
+            textContentType="password"
+            placeholderTextColor="#9b8a6a"
+            editable={!isAuthenticating}
+          />
+          <TouchableOpacity
+            onPress={() => setPasswordVisible(prev => !prev)}
+            accessibilityRole="button"
+            accessibilityLabel={
+              isPasswordVisible ? 'Hide password' : 'Show password'
+            }
+            style={styles.authPasswordToggle}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          >
+            <Ionicons
+              name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={20}
+              color="#6f5a35"
+            />
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           onPress={onSignIn}
           style={[
