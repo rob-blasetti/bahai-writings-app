@@ -1,6 +1,5 @@
 import React, { Fragment, useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 import { extractPassageSentences, getShareableBlockText } from './shareUtils';
 
@@ -12,10 +11,7 @@ export default function ShareSelectionScreen({
   selectedSentenceIndexes,
   onToggleSentence,
   onClose,
-  onOpenProgram,
   onNext,
-  hasProgramPassages,
-  programBadgeLabel,
   maxSelections = 2,
 }) {
   const sentences = useMemo(() => {
@@ -47,14 +43,6 @@ export default function ShareSelectionScreen({
         styles={styles}
         onBack={onClose}
         backAccessibilityLabel={shareBackButtonLabel}
-        rightAccessory={
-          <ProgramIconButton
-            styles={styles}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
-            onPress={onOpenProgram}
-          />
-        }
       />
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Choose what to share

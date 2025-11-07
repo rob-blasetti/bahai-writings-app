@@ -20,7 +20,6 @@ import { launchCamera } from 'react-native-image-picker';
 import ViewShot from 'react-native-view-shot';
 import Video from 'react-native-video';
 import { extractPassageSentences, getShareableBlockText } from './shareUtils';
-import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 
 const getThemeChipStyle = (theme, isActive) => ({
@@ -35,9 +34,6 @@ export default function ShareEditorScreen({
   shareBackButtonLabel,
   selectedSentenceIndexes,
   onClose,
-  onOpenProgram,
-  hasProgramPassages,
-  programBadgeLabel,
   activeShareTheme,
   shareThemes,
   shareThemeId,
@@ -791,14 +787,6 @@ export default function ShareEditorScreen({
         onBack={onClose}
         backAccessibilityLabel={shareBackButtonLabel}
         title="Share"
-        rightAccessory={
-          <ProgramIconButton
-            styles={styles}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
-            onPress={onOpenProgram}
-          />
-        }
       />
       <View style={styles.shareEditorBody}>
         <View style={styles.sharePreviewWrapper}>
