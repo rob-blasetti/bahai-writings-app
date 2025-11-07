@@ -18,7 +18,7 @@ import {
 } from 'react-native-safe-area-context';
 import writingsManifest from './assets/generated/writings.json';
 import { authenticateLiquidSpirit } from './services/liquidSpiritAuth';
-import HomeScreen from './screens/HomeScreen';
+import StartScreen from './screens/StartScreen';
 import SignInScreen from './screens/SignInScreen';
 import LibraryScreen from './screens/LibraryScreen';
 import SettingsScreen from './screens/SettingsScreen';
@@ -31,12 +31,19 @@ import PassageScreen from './screens/PassageScreen';
 import UnavailableScreen from './screens/UnavailableScreen';
 import { extractPassageSentences, getShareableBlockText } from './screens/shareUtils';
 import ReflectionModal from './components/ReflectionModal';
+import SearchScreen from './screens/SearchScreen';
+import ProfileScreen from './screens/ProfileScreen';
+import MyVersesScreen from './screens/MyVersesScreen';
+import { BottomNavigationBar } from './components/BottomNavigationBar';
+import { createIconSetFromFontello } from 'react-native-vector-icons';
 
 const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
   'https://liquidspirit.example.com/api/devotionals';
 const SHARE_SELECTION_LIMIT = 2;
 const AUTH_STORAGE_KEY = 'bahai-writings-app/authState';
+const BOTTOM_TAB_KEYS = ['home', 'search', 'profile', 'myVerses'];
+const BOTTOM_TAB_SET = new Set(BOTTOM_TAB_KEYS);
 
 function resolveAuthToken(payload) {
   if (!payload || typeof payload !== 'object') {
@@ -60,6 +67,142 @@ function resolveAuthToken(payload) {
   }
 
   return null;
+}
+
+function normalizeDisplayString(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  return trimmed.replace(/\s+/g, ' ');
+}
+
+function joinNameParts(...parts) {
+  const normalizedParts = parts
+    .map(part => normalizeDisplayString(part))
+    .filter(Boolean);
+  if (normalizedParts.length === 0) {
+    return null;
+  }
+  return normalizedParts.join(' ');
+}
+
+function collectNameCandidates(target, addCandidate) {
+  if (!target || typeof target !== 'object') {
+    return;
+  }
+
+  addCandidate(target.name);
+  addCandidate(target.fullName);
+  addCandidate(target.full_name);
+  addCandidate(target.displayName);
+  addCandidate(target.display_name);
+  addCandidate(target.preferredName);
+  addCandidate(target.preferred_name);
+
+  const constructed = joinNameParts(
+    target.firstName ?? target.first_name ?? target.givenName ?? target.given_name,
+    target.lastName ?? target.last_name ?? target.familyName ?? target.family_name ?? target.surname,
+  );
+  if (constructed) {
+    addCandidate(constructed);
+  }
+}
+
+function resolveUserDisplayName(payload, fallbackName = 'Kali', fallbackEmail = null) {
+  const candidates = [];
+  const addCandidate = value => {
+    const normalized = normalizeDisplayString(value);
+    if (!normalized) {
+      return;
+    }
+    if (!candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  collectNameCandidates(payload, addCandidate);
+  collectNameCandidates(payload?.user, addCandidate);
+  collectNameCandidates(payload?.profile, addCandidate);
+  collectNameCandidates(payload?.data, addCandidate);
+  collectNameCandidates(payload?.data?.user, addCandidate);
+  collectNameCandidates(payload?.data?.profile, addCandidate);
+  collectNameCandidates(payload?.auth, addCandidate);
+  collectNameCandidates(payload?.auth?.user, addCandidate);
+  collectNameCandidates(payload?.auth?.profile, addCandidate);
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  const fallbackFromEmail = normalizeDisplayString(fallbackEmail);
+  if (fallbackFromEmail) {
+    return fallbackFromEmail;
+  }
+
+  const normalizedFallbackName = normalizeDisplayString(fallbackName);
+  if (normalizedFallbackName) {
+    return normalizedFallbackName;
+  }
+
+  return 'Friend';
+}
+
+function normalizeEmail(value) {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+  if (!trimmed.includes('@')) {
+    return null;
+  }
+  return trimmed;
+}
+
+function collectEmailCandidates(target, addCandidate) {
+  if (!target || typeof target !== 'object') {
+    return;
+  }
+  addCandidate(target.email);
+  addCandidate(target.userEmail);
+  addCandidate(target.contactEmail);
+  addCandidate(target.username);
+}
+
+function resolveUserEmail(payload, fallbackEmail = null) {
+  const candidates = [];
+  const addCandidate = value => {
+    const normalized = normalizeEmail(value);
+    if (!normalized) {
+      return;
+    }
+    if (!candidates.includes(normalized)) {
+      candidates.push(normalized);
+    }
+  };
+
+  collectEmailCandidates(payload, addCandidate);
+  collectEmailCandidates(payload?.user, addCandidate);
+  collectEmailCandidates(payload?.profile, addCandidate);
+  collectEmailCandidates(payload?.data, addCandidate);
+  collectEmailCandidates(payload?.data?.user, addCandidate);
+  collectEmailCandidates(payload?.data?.profile, addCandidate);
+  collectEmailCandidates(payload?.auth, addCandidate);
+  collectEmailCandidates(payload?.auth?.user, addCandidate);
+  collectEmailCandidates(payload?.auth?.profile, addCandidate);
+
+  if (candidates.length > 0) {
+    return candidates[0];
+  }
+
+  const normalizedFallback = normalizeEmail(fallbackEmail);
+  return normalizedFallback ?? '';
 }
 
 let cachedAsyncStorage = null;
@@ -450,7 +593,7 @@ function AppContent() {
         .filter(Boolean);
     });
   }, [writings]);
-  const [currentScreen, setCurrentScreen] = useState('home');
+  const [currentScreen, setCurrentScreen] = useState('start');
   const [authenticatedUser, setAuthenticatedUser] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -548,7 +691,7 @@ function AppContent() {
           setAuthenticatedUser(null);
           setAuthError(null);
           setAuthPassword('');
-          setCurrentScreen('library');
+          setCurrentScreen('home');
         } else if (persisted?.mode === 'user') {
           const storedEmail =
             typeof persisted.email === 'string' ? persisted.email : '';
@@ -574,7 +717,7 @@ function AppContent() {
             setAuthenticatedUser(null);
             setAuthPassword('');
             setAuthError(null);
-            setCurrentScreen('home');
+            setCurrentScreen('start');
           } else {
             setAuthenticatedUser({
               name: storedName,
@@ -584,7 +727,7 @@ function AppContent() {
             });
             setAuthPassword('');
             setAuthError(null);
-            setCurrentScreen('library');
+            setCurrentScreen('home');
           }
         } else if (persisted) {
           await clearPersistedAuthState();
@@ -678,7 +821,7 @@ function AppContent() {
     if (shareContext.returnScreen === 'section') {
       return 'Back to reading';
     }
-    if (shareContext.returnScreen === 'library') {
+    if (shareContext.returnScreen === 'home') {
       return 'Back to library';
     }
     return 'Back';
@@ -725,7 +868,7 @@ function AppContent() {
     if (programReturnScreen === 'settings') {
       return 'Back to settings';
     }
-    if (programReturnScreen === 'library') {
+    if (programReturnScreen === 'home') {
       return 'Back to library';
     }
     return 'Back';
@@ -843,6 +986,16 @@ function AppContent() {
     [],
   );
 
+  const handleBottomTabPress = useCallback(
+    tabKey => {
+      if (!BOTTOM_TAB_SET.has(tabKey)) {
+        return;
+      }
+      setCurrentScreen(tabKey);
+    },
+    [setCurrentScreen],
+  );
+
   const handleCloseReflectionModal = useCallback(() => {
     setReflectionModalContext(null);
     setReflectionInput('');
@@ -873,7 +1026,7 @@ function AppContent() {
       mode: 'guest',
       savedAt: Date.now(),
     });
-    setCurrentScreen('library');
+    setCurrentScreen('home');
   };
 
   const handleStartSignIn = () => {
@@ -884,7 +1037,7 @@ function AppContent() {
   const handleCancelSignIn = () => {
     setIsAuthenticating(false);
     setAuthError(null);
-    setCurrentScreen('home');
+    setCurrentScreen('start');
   };
 
   const handleSignIn = async () => {
@@ -905,17 +1058,19 @@ function AppContent() {
         email: trimmedEmail,
         password: authPassword,
       });
-      const inferredName =
-        result?.user?.name ??
-        result?.profile?.name ??
-        result?.name ??
-        authenticatedUser?.name ??
-        'Kali';
+      const normalizedEmailResponse = resolveUserEmail(result, trimmedEmail);
+      const inferredName = resolveUserDisplayName(
+        result,
+        authenticatedUser?.firstName ?? 'Kali',
+        normalizedEmailResponse,
+      );
+      const resolvedEmail =
+        normalizeDisplayString(normalizedEmailResponse) ?? trimmedEmail;
       const token = resolveAuthToken(result);
       const tokenExpiresAt = inferAuthExpirationMs(result, token);
       const normalizedUser = {
         name: inferredName,
-        email: trimmedEmail,
+        email: resolvedEmail,
         token,
         tokenExpiresAt: tokenExpiresAt ?? null,
       };
@@ -927,13 +1082,14 @@ function AppContent() {
       console.log('[Auth] User signed in:', normalizedUser);
 
       setAuthenticatedUser(normalizedUser);
+      setAuthEmail(resolvedEmail);
       await savePersistedAuthState({
         mode: 'user',
         ...normalizedUser,
         savedAt: Date.now(),
       });
       setAuthPassword('');
-      setCurrentScreen('library');
+      setCurrentScreen('home');
       Alert.alert(
         'Signed in',
         inferredName ? `Welcome, ${inferredName}!` : 'You are signed in.',
@@ -946,7 +1102,7 @@ function AppContent() {
   };
 
   const handleCloseShare = () => {
-    const nextScreen = shareContext?.returnScreen ?? 'library';
+    const nextScreen = shareContext?.returnScreen ?? 'home';
     setShareSelectedSentenceIndexes([]);
     setShareContext(null);
     setCurrentScreen(nextScreen);
@@ -1343,7 +1499,7 @@ function AppContent() {
   };
 
   const handleCloseProgram = () => {
-    const nextScreen = programReturnScreen ?? 'library';
+    const nextScreen = programReturnScreen ?? 'home';
     setProgramReturnScreen(null);
     setCurrentScreen(nextScreen);
   };
@@ -1497,7 +1653,7 @@ function AppContent() {
   };
 
   const handleCloseSettings = () => {
-    setCurrentScreen('library');
+    setCurrentScreen('home');
   };
 
   const handleLogout = useCallback(async () => {
@@ -1510,11 +1666,11 @@ function AppContent() {
     } catch (error) {
       console.warn('[Auth] Unable to clear persisted auth during logout', error);
     }
-    setCurrentScreen('home');
+    setCurrentScreen('start');
   }, []);
 
   const handleBackToHome = () => {
-    setCurrentScreen('library');
+    setCurrentScreen('home');
     setSelectedWritingId(null);
     setSelectedSectionId(null);
     setRandomPassage(null);
@@ -1538,6 +1694,10 @@ function AppContent() {
   const hasPassages = availablePassages.length > 0;
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
   const isReflectionModalVisible = Boolean(reflectionModalContext);
+  const isBottomTabScreen = BOTTOM_TAB_SET.has(currentScreen);
+  const containerBottomPadding = isBottomTabScreen
+    ? 0
+    : safeAreaInsets.bottom;
 
   const renderBlockContent = (block, index, options = {}) => {
     if (!block) {
@@ -1769,9 +1929,9 @@ function AppContent() {
   }
 
   switch (currentScreen) {
-    case 'home':
+    case 'start':
       screenContent = (
-        <HomeScreen
+        <StartScreen
           styles={styles}
           displayName={displayName}
           onStartSignIn={handleStartSignIn}
@@ -1794,7 +1954,7 @@ function AppContent() {
         />
       );
       break;
-    case 'library':
+    case 'home':
       screenContent = (
         <LibraryScreen
           styles={styles}
@@ -2004,6 +2164,27 @@ function AppContent() {
         );
       }
       break;
+    case 'search':
+      screenContent = <SearchScreen styles={styles} />;
+      break;
+    case 'profile':
+      screenContent = (
+        <ProfileScreen
+          styles={styles}
+          displayName={displayName}
+          email={authenticatedUser?.email ?? authEmail ?? ''}
+          isAuthenticated={Boolean(authenticatedUser)}
+        />
+      );
+      break;
+    case 'myVerses':
+      screenContent = (
+        <MyVersesScreen
+          styles={styles}
+          hasProgramPassages={hasProgramPassages}
+        />
+      );
+      break;
     default:
       screenContent = (
         <UnavailableScreen
@@ -2022,13 +2203,20 @@ function AppContent() {
         styles.container,
         {
           paddingTop: safeAreaInsets.top,
-          paddingBottom: safeAreaInsets.bottom,
+          paddingBottom: containerBottomPadding,
           paddingLeft: safeAreaInsets.left,
           paddingRight: safeAreaInsets.right,
         },
       ]}
     >
-      {screenContent}
+      <View style={styles.screenContentWrapper}>{screenContent}</View>
+      {isBottomTabScreen ? (
+        <BottomNavigationBar
+          activeTab={currentScreen}
+          onTabPress={handleBottomTabPress}
+          safeAreaInsets={safeAreaInsets}
+        />
+      ) : null}
       <ReflectionModal
         visible={isReflectionModalVisible}
         styles={styles}
@@ -2046,6 +2234,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#f7f4ef',
+  },
+  screenContentWrapper: {
+    flex: 1,
+  },
+  bottomNavScreen: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingVertical: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  bottomNavScreenTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#2c1f0c',
+    marginBottom: 12,
+  },
+  bottomNavScreenSubtitle: {
+    fontSize: 16,
+    color: '#6f5a35',
+    lineHeight: 24,
+    textAlign: 'center',
   },
   authContainer: {
     flex: 1,
