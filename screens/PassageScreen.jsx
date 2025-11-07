@@ -16,6 +16,7 @@ export default function PassageScreen({
   onBack,
   renderBlockContent,
   onAddToProgram,
+  onAddToMyVerses,
   onShare,
   onShowAnother,
   onOpenProgram,
@@ -117,6 +118,24 @@ export default function PassageScreen({
                 style={[styles.shareActionChip, styles.chipInRow, styles.chipSpacing]}
               >
                 <Text style={styles.shareActionChipLabel}>Share</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() =>
+                  onAddToMyVerses({
+                    block: randomPassage.block,
+                    writingId: randomPassage.writingId,
+                    writingTitle: randomPassage.writingTitle,
+                    sectionId: randomPassage.sectionId,
+                    sectionTitle: randomPassage.sectionTitle,
+                  })
+                }
+                style={[
+                  styles.shareActionChip,
+                  styles.chipInRow,
+                  styles.chipSpacing,
+                ]}
+              >
+                <Text style={styles.shareActionChipLabel}>Add to my verses</Text>
               </TouchableOpacity>
             </View>
           </View>

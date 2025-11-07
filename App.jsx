@@ -42,6 +42,7 @@ const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
   'https://liquidspirit.example.com/api/devotionals';
 const SHARE_SELECTION_LIMIT = 2;
 const AUTH_STORAGE_KEY = 'bahai-writings-app/authState';
+const MY_VERSES_STORAGE_KEY = 'bahai-writings-app/myVerses';
 const BOTTOM_TAB_KEYS = ['home', 'search', 'profile', 'myVerses'];
 const BOTTOM_TAB_SET = new Set(BOTTOM_TAB_KEYS);
 
@@ -785,6 +786,7 @@ function AppContent() {
   const [shareContext, setShareContext] = useState(null);
   const [shareSelectedSentenceIndexes, setShareSelectedSentenceIndexes] = useState([]);
   const [programPassages, setProgramPassages] = useState([]);
+  const [myVerses, setMyVerses] = useState([]);
   const [programReturnScreen, setProgramReturnScreen] = useState(null);
   const [programTitle, setProgramTitle] = useState('');
   const [programNotes, setProgramNotes] = useState('');
@@ -795,6 +797,7 @@ function AppContent() {
   const [reflectionInput, setReflectionInput] = useState('');
   const [sectionBlockIndex, setSectionBlockIndex] = useState(0);
   const sectionPagerRef = useRef(null);
+  const hasHydratedMyVersesRef = useRef(false);
   const sectionViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 60,
   });
@@ -811,6 +814,112 @@ function AppContent() {
     const nextIndex = viewableItems[0].index ?? 0;
     setSectionBlockIndex(nextIndex);
   });
+  useEffect(() => {
+    let isMounted = true;
+
+    const restoreMyVerses = async () => {
+      try {
+        const storage = getAsyncStorageModule();
+        const stored = await storage.getItem(MY_VERSES_STORAGE_KEY);
+
+        if (!stored) {
+          return;
+        }
+
+        const parsed = JSON.parse(stored);
+
+        if (!Array.isArray(parsed) || parsed.length === 0) {
+          return;
+        }
+
+        const normalized = parsed
+          .filter(
+            item =>
+              item &&
+              typeof item === 'object' &&
+              item.block &&
+              typeof item.block.id !== 'undefined',
+          )
+          .map(item => ({
+            ...item,
+            savedAt:
+              typeof item.savedAt === 'number' && Number.isFinite(item.savedAt)
+                ? item.savedAt
+                : Date.now(),
+          }));
+
+        if (!isMounted || normalized.length === 0) {
+          return;
+        }
+
+        setMyVerses(previous => {
+          const existing = Array.isArray(previous) ? previous : [];
+          if (existing.length === 0) {
+            return normalized;
+          }
+
+          const existingKeys = new Set(
+            existing.map(
+              item =>
+                `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+                  item.sectionId ?? ''
+                }`,
+            ),
+          );
+
+          const itemsToAdd = normalized.filter(item => {
+            const key = `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+              item.sectionId ?? ''
+            }`;
+            if (existingKeys.has(key)) {
+              return false;
+            }
+            existingKeys.add(key);
+            return true;
+          });
+
+          if (itemsToAdd.length === 0) {
+            return existing;
+          }
+
+          return [...existing, ...itemsToAdd].sort(
+            (a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0),
+          );
+        });
+      } catch (error) {
+        console.warn('[MyVerses] Unable to restore saved verses', error);
+      } finally {
+        if (isMounted) {
+          hasHydratedMyVersesRef.current = true;
+        }
+      }
+    };
+
+    restoreMyVerses();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!hasHydratedMyVersesRef.current) {
+      return;
+    }
+
+    const persistMyVerses = async () => {
+      try {
+        const storage = getAsyncStorageModule();
+        await storage.setItem(
+          MY_VERSES_STORAGE_KEY,
+          JSON.stringify(myVerses),
+        );
+      } catch (error) {
+        console.warn('[MyVerses] Unable to persist saved verses', error);
+      }
+    };
+
+    persistMyVerses();
+  }, [myVerses]);
   const shareBackButtonLabel = useMemo(() => {
     if (!shareContext) {
       return 'Back';
@@ -1266,7 +1375,7 @@ function AppContent() {
     setCurrentScreen('shareSelect');
   };
 
-  const createProgramItemFromBlock = useCallback(({
+  const createPassageSnapshot = useCallback(({
     block,
     writingId,
     writingTitle,
@@ -1290,8 +1399,6 @@ function AppContent() {
     }
 
     const timestamp = Date.now();
-    const normalizedWritingId = writingId ?? null;
-    const normalizedSectionId = sectionId ?? null;
     const blockId = block.id ?? `block-${timestamp}`;
 
     const safeBlock = {
@@ -1305,14 +1412,48 @@ function AppContent() {
     };
 
     return {
-      id: `program-${timestamp}-${Math.random().toString(36).slice(2, 8)}`,
       block: safeBlock,
-      writingId: normalizedWritingId,
+      writingId: writingId ?? null,
       writingTitle: writingTitle ?? 'Unknown writing',
-      sectionId: normalizedSectionId,
+      sectionId: sectionId ?? null,
       sectionTitle: sectionTitle ?? null,
     };
   }, []);
+
+  const createProgramItemFromBlock = useCallback(
+    payload => {
+      const snapshot = createPassageSnapshot(payload);
+
+      if (!snapshot) {
+        return null;
+      }
+
+      return {
+        ...snapshot,
+        id: `program-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      };
+    },
+    [createPassageSnapshot],
+  );
+
+  const createMyVerseFromBlock = useCallback(
+    payload => {
+      const snapshot = createPassageSnapshot(payload);
+
+      if (!snapshot) {
+        return null;
+      }
+
+      const savedAt = Date.now();
+
+      return {
+        ...snapshot,
+        id: `verse-${savedAt}-${Math.random().toString(36).slice(2, 8)}`,
+        savedAt,
+      };
+    },
+    [createPassageSnapshot],
+  );
 
   const addProgramItems = useCallback(
     newItems => {
@@ -1367,6 +1508,55 @@ function AppContent() {
     [setProgramPassages, setProgramSubmissionError, setProgramSubmissionSuccess],
   );
 
+  const addMyVerses = useCallback(newItems => {
+    if (!Array.isArray(newItems) || newItems.length === 0) {
+      return 0;
+    }
+
+    let additions = 0;
+
+    setMyVerses(previous => {
+      const existing = Array.isArray(previous) ? previous : [];
+      const existingKeys = new Set(
+        existing.map(
+          item =>
+            `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+              item.sectionId ?? ''
+            }`,
+        ),
+      );
+
+      const itemsToAdd = [];
+
+      newItems.forEach(item => {
+        if (!item?.block?.id) {
+          return;
+        }
+        const key = `${item.block.id}::${item.writingId ?? ''}::${
+          item.sectionId ?? ''
+        }`;
+        if (!existingKeys.has(key)) {
+          existingKeys.add(key);
+          itemsToAdd.push(item);
+        }
+      });
+
+      additions = itemsToAdd.length;
+
+      if (itemsToAdd.length === 0) {
+        return existing;
+      }
+
+      const merged = [...itemsToAdd, ...existing].sort(
+        (a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0),
+      );
+
+      return merged;
+    });
+
+    return additions;
+  }, []);
+
   const handleAddToProgram = ({
     block,
     writingId,
@@ -1387,6 +1577,28 @@ function AppContent() {
     }
 
     addProgramItems([programItem]);
+  };
+
+  const handleAddToMyVerses = ({
+    block,
+    writingId,
+    writingTitle,
+    sectionId,
+    sectionTitle,
+  }) => {
+    const verseItem = createMyVerseFromBlock({
+      block,
+      writingId,
+      writingTitle,
+      sectionId,
+      sectionTitle,
+    });
+
+    if (!verseItem) {
+      return;
+    }
+
+    addMyVerses([verseItem]);
   };
 
   const handleAddProgramSections = useCallback(
@@ -1508,6 +1720,10 @@ function AppContent() {
     setProgramPassages(previous =>
       previous.filter(item => item.id !== itemId),
     );
+  };
+
+  const handleRemoveFromMyVerses = verseId => {
+    setMyVerses(previous => previous.filter(item => item.id !== verseId));
   };
 
   const handleClearProgram = () => {
@@ -2114,14 +2330,15 @@ function AppContent() {
             sectionPagerRef={sectionPagerRef}
             sectionPageWidth={sectionPageWidth}
             sectionViewabilityConfig={sectionViewabilityConfig}
-            sectionViewableItemsChanged={sectionViewableItemsChanged}
-            renderBlockContent={renderBlockContent}
-            onAddToProgram={handleAddToProgram}
-            onShare={handleOpenShare}
-            onOpenProgram={handleOpenProgram}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
-          />
+          sectionViewableItemsChanged={sectionViewableItemsChanged}
+          renderBlockContent={renderBlockContent}
+          onAddToProgram={handleAddToProgram}
+          onAddToMyVerses={handleAddToMyVerses}
+          onShare={handleOpenShare}
+          onOpenProgram={handleOpenProgram}
+          hasProgramPassages={hasProgramPassages}
+          programBadgeLabel={programBadgeLabel}
+        />
         );
       } else {
         screenContent = (
@@ -2143,13 +2360,14 @@ function AppContent() {
             scaledTypography={scaledTypography}
             randomPassage={randomPassage}
             onBack={handleBackToHome}
-            renderBlockContent={renderBlockContent}
-            onAddToProgram={handleAddToProgram}
-            onShare={handleOpenShare}
-            onShowAnother={handleShowRandomPassage}
-            onOpenProgram={handleOpenProgram}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
+          renderBlockContent={renderBlockContent}
+          onAddToProgram={handleAddToProgram}
+          onAddToMyVerses={handleAddToMyVerses}
+          onShare={handleOpenShare}
+          onShowAnother={handleShowRandomPassage}
+          onOpenProgram={handleOpenProgram}
+          hasProgramPassages={hasProgramPassages}
+          programBadgeLabel={programBadgeLabel}
           />
         );
       } else {
@@ -2181,7 +2399,10 @@ function AppContent() {
       screenContent = (
         <MyVersesScreen
           styles={styles}
-          hasProgramPassages={hasProgramPassages}
+          scaledTypography={scaledTypography}
+          verses={myVerses}
+          renderBlockContent={renderBlockContent}
+          onRemoveVerse={handleRemoveFromMyVerses}
         />
       );
       break;
@@ -2616,6 +2837,13 @@ const styles = StyleSheet.create({
   programListContent: {
     paddingBottom: 32,
   },
+  myVersesList: {
+    flex: 1,
+    marginTop: 16,
+  },
+  myVersesListContent: {
+    paddingBottom: 32,
+  },
   programThemeSection: {
     paddingHorizontal: 4,
     paddingBottom: 24,
@@ -2705,6 +2933,11 @@ const styles = StyleSheet.create({
   programCardSubtitle: {
     fontSize: 14,
     color: '#6f5a35',
+    marginTop: 4,
+  },
+  myVerseSavedAt: {
+    fontSize: 12,
+    color: '#8a7752',
     marginTop: 4,
   },
   programRemoveButton: {
@@ -3013,6 +3246,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'flex-end',
     alignItems: 'center',
+    flexWrap: 'wrap',
   },
   chipInRow: {
     alignSelf: 'auto',

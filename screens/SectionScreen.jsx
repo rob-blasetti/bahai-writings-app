@@ -16,6 +16,7 @@ export default function SectionScreen({
   sectionViewableItemsChanged,
   renderBlockContent,
   onAddToProgram,
+  onAddToMyVerses,
   onShare,
   onOpenProgram,
   hasProgramPassages,
@@ -71,6 +72,24 @@ export default function SectionScreen({
           >
             <Text style={styles.shareActionChipLabel}>Share</Text>
           </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() =>
+              onAddToMyVerses({
+                block: item,
+                writingId: selectedWriting.id,
+                writingTitle: selectedWriting.title,
+                sectionId: selectedSection.id,
+                sectionTitle: selectedSection.title,
+              })
+            }
+            style={[
+              styles.shareActionChip,
+              styles.chipInRow,
+              styles.chipSpacing,
+            ]}
+          >
+            <Text style={styles.shareActionChipLabel}>Add to my verses</Text>
+          </TouchableOpacity>
         </View>
       </View>
     ),
@@ -81,6 +100,7 @@ export default function SectionScreen({
       sectionPageWidth,
       selectedSection,
       selectedWriting,
+      onAddToMyVerses,
       styles,
     ],
   );
