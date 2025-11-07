@@ -36,7 +36,6 @@ export default function ShareEditorScreen({
   selectedSentenceIndexes,
   onClose,
   onOpenProgram,
-  onChangeSelection,
   hasProgramPassages,
   programBadgeLabel,
   activeShareTheme,
@@ -166,6 +165,14 @@ export default function ShareEditorScreen({
         lineHeightScale: 1.1,
       },
     ],
+    [],
+  );
+  const layoutGlyphConfig = useMemo(
+    () => ({
+      classic: { align: 'flex-start', widths: [30, 24, 26], emphasize: false },
+      centered: { align: 'center', widths: [28, 28, 24], emphasize: false },
+      poster: { align: 'center', widths: [34, 26, 34], emphasize: true },
+    }),
     [],
   );
 
@@ -560,16 +567,27 @@ export default function ShareEditorScreen({
                 <TouchableOpacity
                   key={option.id}
                   onPress={() => setFontId(option.id)}
-                  style={[
-                    styles.shareEditorOption,
-                    styles.sharePaletteOptionCard,
-                    isSelected && styles.shareEditorOptionSelected,
-                  ]}
+                  style={styles.sharePaletteCompactOption}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
                 >
-                  <Text style={[styles.shareEditorOptionLabel, option.style]}>Aa</Text>
-                  <Text style={styles.shareEditorOptionName}>{option.label}</Text>
+                  <View
+                    style={[
+                      styles.sharePaletteCompactSwatch,
+                      isSelected && styles.sharePaletteCompactSwatchSelected,
+                    ]}
+                  >
+                    <Text style={[styles.sharePaletteFontSample, option.style]}>Aa</Text>
+                  </View>
+                  <Text
+                    style={[
+                      styles.sharePaletteCompactLabel,
+                      isSelected && styles.sharePaletteCompactLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {option.label}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -610,21 +628,35 @@ export default function ShareEditorScreen({
                 <TouchableOpacity
                   key={option.id}
                   onPress={() => setBackgroundId(option.id)}
-                  style={[
-                    styles.shareEditorOption,
-                    styles.sharePaletteOptionCard,
-                    isSelected && styles.shareEditorOptionSelected,
-                  ]}
+                  style={styles.sharePaletteCompactOption}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
                 >
                   <View
                     style={[
-                      styles.shareEditorBackgroundPreview,
-                      { backgroundColor: option.backgroundColor, borderColor: option.borderColor },
+                      styles.sharePaletteCompactSwatch,
+                      isSelected && styles.sharePaletteCompactSwatchSelected,
                     ]}
-                  />
-                  <Text style={styles.shareEditorOptionName}>{option.label}</Text>
+                  >
+                    <View
+                      style={[
+                        styles.sharePaletteBackgroundChip,
+                        {
+                          backgroundColor: option.backgroundColor,
+                          borderColor: option.borderColor,
+                        },
+                      ]}
+                    />
+                  </View>
+                  <Text
+                    style={[
+                      styles.sharePaletteCompactLabel,
+                      isSelected && styles.sharePaletteCompactLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {option.label}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
@@ -639,21 +671,46 @@ export default function ShareEditorScreen({
           >
             {layoutOptions.map(option => {
               const isSelected = option.id === layoutId;
+              const glyph =
+                layoutGlyphConfig[option.id] ?? layoutGlyphConfig.classic;
               return (
                 <TouchableOpacity
                   key={option.id}
                   onPress={() => setLayoutId(option.id)}
-                  style={[
-                    styles.shareEditorLayoutCard,
-                    styles.sharePaletteLayoutCard,
-                    isSelected && styles.shareEditorLayoutCardSelected,
-                  ]}
+                  style={styles.sharePaletteCompactOption}
                   accessibilityRole="button"
                   accessibilityState={{ selected: isSelected }}
                 >
-                  <Text style={styles.shareEditorLayoutTitle}>{option.label}</Text>
-                  <Text style={styles.shareEditorLayoutDescription}>
-                    {option.description}
+                  <View
+                    style={[
+                      styles.sharePaletteCompactSwatch,
+                      isSelected && styles.sharePaletteCompactSwatchSelected,
+                    ]}
+                  >
+                    <View style={styles.sharePaletteLayoutGlyph}>
+                      {glyph.widths.map((width, index) => (
+                        <View
+                          key={`${option.id}-${width}-${index}`}
+                          style={[
+                            styles.sharePaletteLayoutLine,
+                            {
+                              alignSelf: glyph.align,
+                              width,
+                            },
+                            glyph.emphasize && styles.sharePaletteLayoutLinePoster,
+                          ]}
+                        />
+                      ))}
+                    </View>
+                  </View>
+                  <Text
+                    style={[
+                      styles.sharePaletteCompactLabel,
+                      isSelected && styles.sharePaletteCompactLabelActive,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {option.label}
                   </Text>
                 </TouchableOpacity>
               );
@@ -733,6 +790,7 @@ export default function ShareEditorScreen({
         styles={styles}
         onBack={onClose}
         backAccessibilityLabel={shareBackButtonLabel}
+        title="Share"
         rightAccessory={
           <ProgramIconButton
             styles={styles}
@@ -742,23 +800,6 @@ export default function ShareEditorScreen({
           />
         }
       />
-      <View style={styles.shareEditorHeader}>
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          Share this passage
-        </Text>
-        <Text style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}>
-          Craft a beautiful moment before you send this inspiration to someone you love.
-        </Text>
-      </View>
-      {typeof onChangeSelection === 'function' ? (
-        <TouchableOpacity
-          onPress={onChangeSelection}
-          style={styles.shareChangeSelectionButton}
-          accessibilityRole="button"
-        >
-          <Text style={styles.shareChangeSelectionLabel}>Adjust selection</Text>
-        </TouchableOpacity>
-      ) : null}
       <View style={styles.shareEditorBody}>
         <View style={styles.sharePreviewWrapper}>
           <View

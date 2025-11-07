@@ -595,6 +595,7 @@ function AppContent() {
     });
   }, [writings]);
   const [currentScreen, setCurrentScreen] = useState('start');
+  const [activeBottomTab, setActiveBottomTab] = useState('home');
   const [authenticatedUser, setAuthenticatedUser] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
   const [authPassword, setAuthPassword] = useState('');
@@ -1371,10 +1372,6 @@ function AppContent() {
     setCurrentScreen('shareEdit');
   };
 
-  const handleBackToShareSelection = () => {
-    setCurrentScreen('shareSelect');
-  };
-
   const createPassageSnapshot = useCallback(({
     block,
     writingId,
@@ -1910,8 +1907,13 @@ function AppContent() {
   const hasPassages = availablePassages.length > 0;
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
   const isReflectionModalVisible = Boolean(reflectionModalContext);
-  const isBottomTabScreen = BOTTOM_TAB_SET.has(currentScreen);
-  const containerBottomPadding = isBottomTabScreen
+  useEffect(() => {
+    if (BOTTOM_TAB_SET.has(currentScreen)) {
+      setActiveBottomTab(currentScreen);
+    }
+  }, [currentScreen]);
+  const showBottomNav = currentScreen !== 'start';
+  const containerBottomPadding = showBottomNav
     ? 0
     : safeAreaInsets.bottom;
 
@@ -2242,7 +2244,6 @@ function AppContent() {
             selectedSentenceIndexes={shareSelectedSentenceIndexes}
             onClose={handleCloseShare}
             onOpenProgram={handleOpenProgram}
-            onChangeSelection={handleBackToShareSelection}
             hasProgramPassages={hasProgramPassages}
             programBadgeLabel={programBadgeLabel}
             activeShareTheme={activeShareTheme}
@@ -2431,9 +2432,9 @@ function AppContent() {
       ]}
     >
       <View style={styles.screenContentWrapper}>{screenContent}</View>
-      {isBottomTabScreen ? (
+      {showBottomNav ? (
         <BottomNavigationBar
-          activeTab={currentScreen}
+          activeTab={activeBottomTab}
           onTabPress={handleBottomTabPress}
           safeAreaInsets={safeAreaInsets}
         />
@@ -2719,6 +2720,20 @@ const styles = StyleSheet.create({
   topBarRightPlaceholder: {
     width: 44,
     height: 44,
+  },
+  topBarTitleOverlay: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: 0,
+    right: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitle: {
+    fontSize: 17,
+    fontWeight: '700',
+    color: '#3b2a15',
   },
   screenSurface: {
     flex: 1,
@@ -3133,20 +3148,15 @@ const styles = StyleSheet.create({
     marginBottom: 18,
   },
   shareActionChip: {
-    paddingVertical: 6,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     borderColor: '#d7c5a8',
     backgroundColor: '#f0e4d2',
     marginTop: 12,
-  },
-  shareActionChipLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#3b2a15',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   reflectionModalBackdrop: {
     flex: 1,
@@ -3466,6 +3476,7 @@ const styles = StyleSheet.create({
   sharePreviewAuthor: {
     fontSize: 16,
     fontWeight: '600',
+    marginTop: 10,
     marginBottom: 4,
   },
   sharePreviewSection: {
@@ -3566,26 +3577,8 @@ const styles = StyleSheet.create({
   shareEditorContainer: {
     flex: 1,
   },
-  shareEditorHeader: {
-    marginBottom: 12,
-  },
   shareEditorBody: {
     flex: 1,
-  },
-  shareChangeSelectionButton: {
-    alignSelf: 'flex-start',
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#d7c5a8',
-    backgroundColor: '#f8f2e7',
-    marginBottom: 12,
-  },
-  shareChangeSelectionLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6f5a35',
   },
   sharePalette: {
     borderRadius: 18,
@@ -3736,18 +3729,75 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   sharePaletteOptionRow: {
+    flexDirection: 'row',
     paddingVertical: 4,
-    paddingHorizontal: 2,
+    paddingHorizontal: 6,
   },
-  sharePaletteOptionCard: {
-    width: 160,
-    marginRight: 12,
+  sharePaletteCompactOption: {
+    width: 68,
+    marginHorizontal: 6,
+    alignItems: 'center',
+  },
+  sharePaletteCompactSwatch: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fffdf8',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sharePaletteCompactSwatchSelected: {
+    borderColor: '#c6a87d',
+    backgroundColor: '#f2e6d4',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  sharePaletteCompactLabel: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6f5a35',
+    textAlign: 'center',
+  },
+  sharePaletteCompactLabelActive: {
+    color: '#3b2a15',
+  },
+  sharePaletteFontSample: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#3b2a15',
+  },
+  sharePaletteBackgroundChip: {
+    width: 32,
+    height: 32,
+    borderRadius: 10,
+    borderWidth: 2,
+  },
+  sharePaletteLayoutGlyph: {
+    width: '100%',
+    height: '100%',
+    alignItems: 'stretch',
+    justifyContent: 'center',
+  },
+  sharePaletteLayoutLine: {
+    height: 3,
+    borderRadius: 2,
+    backgroundColor: '#3b2a15',
+    marginVertical: 1,
+  },
+  sharePaletteLayoutLinePoster: {
+    height: 4,
   },
   sharePaletteSwatchRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     paddingVertical: 8,
   },
   sharePaletteColorSwatch: {
@@ -3755,19 +3805,12 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: 22,
     marginHorizontal: 6,
-    marginBottom: 0,
+    marginBottom: 8,
   },
   sharePaletteLayoutRow: {
+    flexDirection: 'row',
     paddingVertical: 4,
-    paddingHorizontal: 2,
-  },
-  sharePaletteLayoutCard: {
-    width: 200,
-    marginRight: 12,
-    marginBottom: 0,
-  },
-  sharePaletteLayoutColumn: {
-    paddingBottom: 4,
+    paddingHorizontal: 6,
   },
   shareThemeRow: {
     flexDirection: 'row',
@@ -3815,40 +3858,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#3b2a15',
   },
-  shareEditorOptionsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginHorizontal: -6,
-  },
-  shareEditorOption: {
-    width: '48%',
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: '#d7c5a8',
-    backgroundColor: '#f8f2e7',
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-    marginHorizontal: 6,
-    marginBottom: 12,
-  },
-  shareEditorOptionSelected: {
-    borderColor: '#c6a87d',
-    backgroundColor: '#f2e6d4',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  shareEditorOptionLabel: {
-    fontSize: 20,
-    marginBottom: 6,
-    color: '#2c1f0c',
-  },
-  shareEditorOptionName: {
-    fontSize: 14,
-    color: '#6f5a35',
-  },
   shareEditorColorRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -3881,34 +3890,6 @@ const styles = StyleSheet.create({
   },
   shareEditorOptionsColumn: {
     flexDirection: 'column',
-  },
-  shareEditorLayoutCard: {
-    borderWidth: 1,
-    borderColor: '#d7c5a8',
-    borderRadius: 16,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    backgroundColor: '#f8f2e7',
-    marginBottom: 12,
-  },
-  shareEditorLayoutCardSelected: {
-    borderColor: '#c6a87d',
-    backgroundColor: '#f2e6d4',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  shareEditorLayoutTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#3b2a15',
-    marginBottom: 6,
-  },
-  shareEditorLayoutDescription: {
-    fontSize: 14,
-    color: '#6f5a35',
   },
   shareEditorHelperText: {
     fontSize: 13,

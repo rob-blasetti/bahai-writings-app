@@ -1,5 +1,6 @@
 import React, { useCallback } from 'react';
 import { FlatList, ScrollView, Text, TouchableOpacity, View } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 
@@ -42,6 +43,7 @@ export default function SectionScreen({
         </ScrollView>
         <View style={[styles.sectionPagerFooter, styles.actionChipRow]}>
           <TouchableOpacity
+            accessibilityLabel="Add passage to devotional program"
             onPress={() =>
               onAddToProgram({
                 block: item,
@@ -53,9 +55,10 @@ export default function SectionScreen({
             }
             style={[styles.shareActionChip, styles.chipInRow]}
           >
-            <Text style={styles.shareActionChipLabel}>Add to program</Text>
+            <Ionicons name="book-outline" size={20} color="#3b2a15" />
           </TouchableOpacity>
           <TouchableOpacity
+            accessibilityLabel="Share this passage"
             onPress={() =>
               onShare({
                 block: item,
@@ -70,9 +73,10 @@ export default function SectionScreen({
               styles.chipSpacing,
             ]}
           >
-            <Text style={styles.shareActionChipLabel}>Share</Text>
+            <Ionicons name="share-social-outline" size={20} color="#3b2a15" />
           </TouchableOpacity>
           <TouchableOpacity
+            accessibilityLabel="Add passage to My Verses"
             onPress={() =>
               onAddToMyVerses({
                 block: item,
@@ -88,7 +92,7 @@ export default function SectionScreen({
               styles.chipSpacing,
             ]}
           >
-            <Text style={styles.shareActionChipLabel}>Add to my verses</Text>
+            <Ionicons name="heart-outline" size={20} color="#3b2a15" />
           </TouchableOpacity>
         </View>
       </View>

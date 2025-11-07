@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 
@@ -93,6 +94,7 @@ export default function PassageScreen({
             })}
             <View style={styles.actionChipRow}>
               <TouchableOpacity
+                accessibilityLabel="Add passage to devotional program"
                 onPress={() =>
                   onAddToProgram({
                     block: randomPassage.block,
@@ -104,9 +106,10 @@ export default function PassageScreen({
                 }
                 style={[styles.shareActionChip, styles.chipInRow]}
               >
-                <Text style={styles.shareActionChipLabel}>Add to program</Text>
+                <Ionicons name="book-outline" size={20} color="#3b2a15" />
               </TouchableOpacity>
               <TouchableOpacity
+                accessibilityLabel="Share this passage"
                 onPress={() =>
                   onShare({
                     block: randomPassage.block,
@@ -117,9 +120,10 @@ export default function PassageScreen({
                 }
                 style={[styles.shareActionChip, styles.chipInRow, styles.chipSpacing]}
               >
-                <Text style={styles.shareActionChipLabel}>Share</Text>
+                <Ionicons name="share-social-outline" size={20} color="#3b2a15" />
               </TouchableOpacity>
               <TouchableOpacity
+                accessibilityLabel="Add passage to My Verses"
                 onPress={() =>
                   onAddToMyVerses({
                     block: randomPassage.block,
@@ -135,7 +139,7 @@ export default function PassageScreen({
                   styles.chipSpacing,
                 ]}
               >
-                <Text style={styles.shareActionChipLabel}>Add to my verses</Text>
+                <Ionicons name="heart-outline" size={20} color="#3b2a15" />
               </TouchableOpacity>
             </View>
           </View>

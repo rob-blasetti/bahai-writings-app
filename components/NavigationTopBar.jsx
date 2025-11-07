@@ -1,5 +1,5 @@
 import React from 'react';
-import { TouchableOpacity, View } from 'react-native';
+import { Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 export function NavigationTopBar({
@@ -9,6 +9,7 @@ export function NavigationTopBar({
   rightAccessory = null,
   iconColor = '#3b2a15',
   containerStyle,
+  title = null,
 }) {
   const accessory =
     rightAccessory != null ? (
@@ -27,6 +28,15 @@ export function NavigationTopBar({
       >
         <Ionicons name="chevron-back" size={22} color={iconColor} />
       </TouchableOpacity>
+      {title ? (
+        <View pointerEvents="none" style={styles.topBarTitleOverlay}>
+          {typeof title === 'string' ? (
+            <Text style={styles.topBarTitle}>{title}</Text>
+          ) : (
+            title
+          )}
+        </View>
+      ) : null}
       {accessory}
     </View>
   );
