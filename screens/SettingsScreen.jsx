@@ -13,6 +13,7 @@ export default function SettingsScreen({
   fontOptions,
   fontScale,
   onSelectFontScale,
+  onLogout,
 }) {
   return (
     <View style={styles.screenSurface}>
@@ -64,6 +65,16 @@ export default function SettingsScreen({
             </TouchableOpacity>
           );
         })}
+      </View>
+      <View style={styles.settingsGroup}>
+        <Text style={styles.settingsGroupLabel}>Account</Text>
+        <TouchableOpacity
+          onPress={onLogout}
+          style={styles.authSecondaryButton}
+          accessibilityRole="button"
+        >
+          <Text style={styles.authSecondaryButtonLabel}>Log Out</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );

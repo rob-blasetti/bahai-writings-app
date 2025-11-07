@@ -36,6 +36,30 @@ const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
 const SHARE_SELECTION_LIMIT = 2;
 const AUTH_STORAGE_KEY = 'bahai-writings-app/authState';
 
+function resolveAuthToken(payload) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  const candidateTokens = [
+    payload.token,
+    payload.accessToken,
+    payload.jwt,
+    payload?.data?.token,
+    payload?.data?.accessToken,
+    payload?.auth?.token,
+    payload?.auth?.accessToken,
+  ];
+
+  for (const candidate of candidateTokens) {
+    if (typeof candidate === 'string' && candidate.trim().length > 0) {
+      return candidate.trim();
+    }
+  }
+
+  return null;
+}
+
 let cachedAsyncStorage = null;
 let hasLoggedMissingAsyncStorage = false;
 
@@ -840,7 +864,7 @@ function AppContent() {
         result?.name ??
         authenticatedUser?.name ??
         'Kali';
-      const token = result?.token ?? result?.accessToken ?? null;
+      const token = resolveAuthToken(result);
       const tokenExpiresAt = inferAuthExpirationMs(result, token);
       const normalizedUser = {
         name: inferredName,
@@ -848,6 +872,12 @@ function AppContent() {
         token,
         tokenExpiresAt: tokenExpiresAt ?? null,
       };
+
+      if (!token) {
+        console.warn('[Auth] Sign-in response missing token; session persistence may fail.');
+      }
+
+      console.log('[Auth] User signed in:', normalizedUser);
 
       setAuthenticatedUser(normalizedUser);
       await savePersistedAuthState({
@@ -1423,6 +1453,19 @@ function AppContent() {
     setCurrentScreen('library');
   };
 
+  const handleLogout = useCallback(async () => {
+    setIsAuthenticating(false);
+    setAuthenticatedUser(null);
+    setAuthPassword('');
+    setAuthError(null);
+    try {
+      await clearPersistedAuthState();
+    } catch (error) {
+      console.warn('[Auth] Unable to clear persisted auth during logout', error);
+    }
+    setCurrentScreen('home');
+  }, []);
+
   const handleBackToHome = () => {
     setCurrentScreen('library');
     setSelectedWritingId(null);
@@ -1710,6 +1753,7 @@ function AppContent() {
           fontOptions={fontOptions}
           fontScale={fontScale}
           onSelectFontScale={handleSelectFontScale}
+          onLogout={handleLogout}
         />
       );
       break;

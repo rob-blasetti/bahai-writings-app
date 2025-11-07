@@ -1,6 +1,33 @@
-const LIQUID_SPIRIT_AUTH_ENDPOINT =
-  global?.LIQUID_SPIRIT_AUTH_ENDPOINT ??
-  'https://liquidspirit.example.com/api/auth/login';
+import { API_URL } from '../config';
+
+const DEFAULT_AUTH_ENDPOINT =
+  'https://liquidspirit.example.com/api/kali/login-ls';
+
+const normalizeBaseUrl = value => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
+};
+
+const resolveAuthEndpoint = () => {
+  if (global?.LIQUID_SPIRIT_AUTH_ENDPOINT) {
+    return global.LIQUID_SPIRIT_AUTH_ENDPOINT;
+  }
+
+  const normalizedBase = normalizeBaseUrl(API_URL);
+  if (normalizedBase) {
+    return `${normalizedBase}/api/kali/login-ls`;
+  }
+
+  return DEFAULT_AUTH_ENDPOINT;
+};
+
+const LIQUID_SPIRIT_AUTH_ENDPOINT = resolveAuthEndpoint();
 
 /**
  * Authenticate the user against the Liquid Spirit API.
