@@ -1,5 +1,5 @@
 import { useContext, useEffect } from 'react';
-import jwtDecode from 'jwt-decode';
+import { jwtDecode } from 'jwt-decode';
 
 import { UserContext } from '../contexts/UserContext';
 import { API_URL } from '../config';
@@ -22,7 +22,15 @@ const extractUserId = decodedToken => {
     return null;
   }
 
-  return decodedToken.userId || decodedToken.id || decodedToken._id || null;
+  return (
+    decodedToken.memberRef ||
+    decodedToken.userId ||
+    decodedToken.id ||
+    decodedToken._id ||
+    decodedToken.actorId ||
+    decodedToken.sub ||
+    null
+  );
 };
 
 const resolveUserIdFromToken = tokenValue => {

@@ -184,7 +184,7 @@ export default function SectionScreen({
                 styles.chipSpacing,
               ]}
             >
-              <Ionicons name="share-social-outline" size={20} color="#3b2a15" />
+              <Ionicons name="paper-plane-outline" size={20} color="#3b2a15" />
             </TouchableOpacity>
             <TouchableOpacity
               accessibilityLabel="Add passage to My Verses"

@@ -5,10 +5,15 @@ export default function ProfileScreen({
   styles,
   displayName = 'Friend',
   email = '',
+  memberRef = '',
   isAuthenticated = false,
 }) {
   const normalizedEmail =
     typeof email === 'string' && email.trim().length > 0 ? email.trim() : '';
+  const normalizedMemberRef =
+    typeof memberRef === 'string' && memberRef.trim().length > 0
+      ? memberRef.trim()
+      : '';
 
   return (
     <View style={styles.bottomNavScreen}>
@@ -20,6 +25,11 @@ export default function ProfileScreen({
           </Text>
           {normalizedEmail ? (
             <Text style={styles.bottomNavScreenSubtitle}>{normalizedEmail}</Text>
+          ) : null}
+          {normalizedMemberRef ? (
+            <Text style={styles.bottomNavScreenSubtitle}>
+              Member Ref: {normalizedMemberRef}
+            </Text>
           ) : null}
           <Text style={styles.bottomNavScreenSubtitle}>
             Personalization controls will appear here.

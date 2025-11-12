@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -10,7 +10,73 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from '@react-native-community/datetimepicker';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+
+const PROGRAM_STEPS = [
+  { id: 'program', label: 'Program' },
+  { id: 'devotional', label: 'Devotional' },
+  { id: 'session', label: 'Session' },
+];
+
+function ProgramStepper({ styles, steps, activeStep, onSelectStep }) {
+  const activeIndex = steps.findIndex(step => step.id === activeStep);
+  return (
+    <View style={styles.programStepper}>
+      {steps.map((step, index) => {
+        const isActive = step.id === activeStep;
+        const isCompleted = index < activeIndex;
+        const isLast = index === steps.length - 1;
+        return (
+          <React.Fragment key={step.id}>
+            <TouchableOpacity
+              onPress={() => onSelectStep(step.id)}
+              style={styles.programStepItem}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+            >
+              <View
+                style={[
+                  styles.programStepNode,
+                  isCompleted && styles.programStepNodeCompleted,
+                  isActive && styles.programStepNodeActive,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.programStepNodeLabel,
+                    (isActive || isCompleted) &&
+                      styles.programStepNodeLabelActive,
+                  ]}
+                >
+                  {index + 1}
+                </Text>
+              </View>
+              <Text
+                style={[
+                  styles.programStepLabel,
+                  isActive && styles.programStepLabelActive,
+                ]}
+              >
+                {step.label}
+              </Text>
+            </TouchableOpacity>
+            {!isLast ? (
+              <View
+                style={[
+                  styles.programStepConnector,
+                  isCompleted && styles.programStepConnectorCompleted,
+                ]}
+              />
+            ) : null}
+          </React.Fragment>
+        );
+      })}
+    </View>
+  );
+}
 
 function ProgramThemeGenerator({ styles, onOpen, feedback }) {
   return (
@@ -192,19 +258,20 @@ function ProgramPassageCard({ styles, item, index, renderBlockContent, onRemove 
   );
 }
 
-function ProgramForm({
+function ProgramDetailsForm({
   styles,
   programTitle,
   onChangeProgramTitle,
   programNotes,
   onChangeProgramNotes,
+  fieldErrors = {},
 }) {
   return (
     <View style={styles.programForm}>
-      <Text style={styles.programFormTitle}>Devotional details</Text>
+      <Text style={styles.programFormTitle}>Program basics</Text>
       <Text style={styles.programFormHint}>
-        Give this devotional a title and optional guidance. These details are
-        included when sending to Liquid Spirit.
+        Give your devotional a clear name so friends recognize it, and add any
+        planning notes you want to remember.
       </Text>
       <Text style={styles.programInputLabel}>Title</Text>
       <TextInput
@@ -216,7 +283,10 @@ function ProgramForm({
         autoCapitalize="sentences"
         autoCorrect
       />
-      <Text style={styles.programInputLabel}>Notes (optional)</Text>
+      {fieldErrors?.title ? (
+        <Text style={styles.programInputError}>{fieldErrors.title}</Text>
+      ) : null}
+      <Text style={styles.programInputLabel}>Description</Text>
       <TextInput
         value={programNotes}
         onChangeText={onChangeProgramNotes}
@@ -227,6 +297,320 @@ function ProgramForm({
         textAlignVertical="top"
       />
     </View>
+  );
+}
+
+function SessionDetailsForm({
+  styles,
+  sessionDate,
+  onChangeSessionDate,
+  sessionTime,
+  onChangeSessionTime,
+  timeZone,
+  onChangeTimeZone,
+  defaultTimeZone,
+  frequencyOptions,
+  selectedFrequency,
+  onSelectFrequency,
+  participantInput,
+  onChangeParticipantInput,
+  facilitatorInput,
+  onChangeFacilitatorInput,
+  fieldErrors = {},
+  currentUserName,
+  currentUserId,
+  includeCurrentUserFacilitator = true,
+  onRemoveCurrentUserFacilitator,
+  onRestoreCurrentUserFacilitator,
+}) {
+  const [iosPickerMode, setIosPickerMode] = useState(null);
+  const [iosPickerDate, setIosPickerDate] = useState(new Date());
+
+  const getFieldError = field => fieldErrors?.[field];
+  const renderFieldError = field => {
+    const message = getFieldError(field);
+    if (!message) {
+      return null;
+    }
+    return <Text style={styles.programInputError}>{message}</Text>;
+  };
+
+  const parseDateValue = value => {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [year, month, day] = value.split('-').map(Number);
+      const parsed = new Date(year, (month ?? 1) - 1, day ?? 1);
+      if (!Number.isNaN(parsed.getTime())) {
+        return parsed;
+      }
+    }
+    return new Date();
+  };
+
+  const parseTimeValue = value => {
+    const baseline = new Date();
+    baseline.setSeconds(0);
+    baseline.setMilliseconds(0);
+    if (/^\d{2}:\d{2}$/.test(value)) {
+      const [hour, minute] = value.split(':').map(Number);
+      baseline.setHours(hour ?? 7, minute ?? 0, 0, 0);
+      return baseline;
+    }
+    baseline.setHours(7, 0, 0, 0);
+    return baseline;
+  };
+
+  const formatDateValue = date => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const formatTimeValue = date => {
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${hours}:${minutes}`;
+  };
+
+  const openPicker = mode => {
+    if (Platform.OS === 'android') {
+      const pickerValue =
+        mode === 'date' ? parseDateValue(sessionDate) : parseTimeValue(sessionTime);
+      DateTimePickerAndroid.open({
+        value: pickerValue,
+        mode,
+        is24Hour: true,
+        onChange: (event, selectedDate) => {
+          if (event.type !== 'set' || !selectedDate) {
+            return;
+          }
+          if (mode === 'date') {
+            onChangeSessionDate(formatDateValue(selectedDate));
+          } else {
+            onChangeSessionTime(formatTimeValue(selectedDate));
+          }
+        },
+      });
+      return;
+    }
+
+    setIosPickerDate(
+      mode === 'date' ? parseDateValue(sessionDate) : parseTimeValue(sessionTime),
+    );
+    setIosPickerMode(mode);
+  };
+
+  const handleIosPickerChange = (_, selectedDate) => {
+    if (selectedDate) {
+      setIosPickerDate(selectedDate);
+    }
+  };
+
+  const handleIosPickerCancel = () => {
+    setIosPickerMode(null);
+  };
+
+  const handleIosPickerConfirm = () => {
+    if (iosPickerMode === 'date') {
+      onChangeSessionDate(formatDateValue(iosPickerDate));
+    } else if (iosPickerMode === 'time') {
+      onChangeSessionTime(formatTimeValue(iosPickerDate));
+    }
+    setIosPickerMode(null);
+  };
+
+  return (
+    <>
+      <View style={styles.programForm}>
+        <Text style={styles.programFormTitle}>Session schedule</Text>
+        <Text style={styles.programFormHint}>
+          Let Liquid Spirit know when and how this devotional takes place so it can
+          notify the right people.
+        </Text>
+      <Text style={styles.programInputLabel}>Session date & time</Text>
+      <View style={styles.programFieldRow}>
+        <View style={styles.programFieldColumn}>
+          <TouchableOpacity
+            onPress={() => openPicker('date')}
+            style={styles.programPickerInput}
+            accessibilityRole="button"
+            accessibilityLabel="Choose devotional date"
+          >
+            <Text
+              style={
+                sessionDate
+                  ? styles.programPickerValue
+                  : styles.programPickerPlaceholder
+              }
+            >
+              {sessionDate || 'YYYY-MM-DD'}
+            </Text>
+          </TouchableOpacity>
+          {renderFieldError('sessionDate')}
+        </View>
+        <View style={styles.programFieldColumn}>
+          <TouchableOpacity
+            onPress={() => openPicker('time')}
+            style={styles.programPickerInput}
+            accessibilityRole="button"
+            accessibilityLabel="Choose devotional start time"
+          >
+            <Text
+              style={
+                sessionTime
+                  ? styles.programPickerValue
+                  : styles.programPickerPlaceholder
+              }
+            >
+              {sessionTime || 'HH:MM'}
+            </Text>
+          </TouchableOpacity>
+          {renderFieldError('sessionTime')}
+        </View>
+      </View>
+      <Text style={styles.programHelperText}>
+        Use 24-hour time (e.g. 19:30) so the Liquid Spirit calendar is accurate.
+      </Text>
+      <Text style={styles.programInputLabel}>Time zone</Text>
+      <TextInput
+        value={timeZone}
+        onChangeText={onChangeTimeZone}
+        placeholder={defaultTimeZone}
+        placeholderTextColor="#b8a58b"
+        style={styles.programTextInput}
+        autoCorrect={false}
+        autoCapitalize="none"
+      />
+      {renderFieldError('timeZone')}
+      <Text style={styles.programInputLabel}>Meeting frequency</Text>
+      <View style={styles.programFrequencyRow}>
+        {frequencyOptions.map(option => {
+          const isSelected = option.id === selectedFrequency;
+          return (
+            <TouchableOpacity
+              key={option.id}
+              onPress={() => onSelectFrequency(option.id)}
+              style={[
+                styles.programFrequencyChip,
+                isSelected && styles.programFrequencyChipActive,
+              ]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isSelected }}
+            >
+              <Text
+                style={[
+                  styles.programFrequencyChipLabel,
+                  isSelected && styles.programFrequencyChipLabelActive,
+                ]}
+              >
+                {option.label}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      <Text style={styles.programHelperText}>
+        Location and logistics are confirmed later—just share the schedule for now.
+      </Text>
+      <Text style={styles.programInputLabel}>Participants (optional)</Text>
+      <TextInput
+        value={participantInput}
+        onChangeText={onChangeParticipantInput}
+        placeholder="Separate names or emails with commas or new lines"
+        placeholderTextColor="#b8a58b"
+        style={[styles.programTextInput, styles.programTextArea]}
+        multiline
+        textAlignVertical="top"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Text style={styles.programHelperText}>
+        These help Liquid Spirit invite friends already in your contacts.
+      </Text>
+      <Text style={styles.programInputLabel}>Facilitators (optional)</Text>
+      {currentUserName ? (
+        includeCurrentUserFacilitator ? (
+          <View style={styles.programFacilitatorChips}>
+            <View style={styles.programFacilitatorChip}>
+              <Text style={styles.programFacilitatorChipLabel}>
+                {currentUserName} (You)
+              </Text>
+              {typeof onRemoveCurrentUserFacilitator === 'function' ? (
+                <TouchableOpacity
+                  onPress={onRemoveCurrentUserFacilitator}
+                  style={styles.programFacilitatorChipRemove}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove yourself as a facilitator"
+                >
+                  <Text style={styles.programFacilitatorChipRemoveLabel}>X</Text>
+                </TouchableOpacity>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          typeof onRestoreCurrentUserFacilitator === 'function' ? (
+            <TouchableOpacity
+              onPress={onRestoreCurrentUserFacilitator}
+              style={styles.programFacilitatorChipRestore}
+              accessibilityRole="button"
+            >
+              <Text style={styles.programFacilitatorChipRestoreLabel}>
+                Add yourself as facilitator
+              </Text>
+            </TouchableOpacity>
+          ) : null
+        )
+      ) : null}
+      <TextInput
+        value={facilitatorInput}
+        onChangeText={onChangeFacilitatorInput}
+        placeholder="Who is leading prayers, music, or reflections?"
+        placeholderTextColor="#b8a58b"
+        style={[styles.programTextInput, styles.programTextArea]}
+        multiline
+        textAlignVertical="top"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      </View>
+      {Platform.OS === 'ios' && iosPickerMode ? (
+        <Modal transparent animationType="fade" visible onRequestClose={handleIosPickerCancel}>
+          <Pressable
+            style={styles.programPickerModalBackdrop}
+            onPress={handleIosPickerCancel}
+          >
+            <Pressable style={styles.programPickerModalCard} onPress={() => {}}>
+              <DateTimePicker
+                mode={iosPickerMode}
+                value={iosPickerDate}
+                display="spinner"
+                onChange={handleIosPickerChange}
+                style={styles.programPickerModalWheel}
+              />
+              <View style={styles.programPickerModalActions}>
+                <TouchableOpacity
+                  onPress={handleIosPickerCancel}
+                  style={styles.programPickerModalButton}
+                >
+                  <Text style={styles.programPickerModalButtonLabel}>Cancel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={handleIosPickerConfirm}
+                  style={[
+                    styles.programPickerModalButton,
+                    styles.programPickerModalButtonPrimary,
+                  ]}
+                >
+                  <Text style={styles.programPickerModalButtonPrimaryLabel}>
+                    Done
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      ) : null}
+    </>
   );
 }
 
@@ -297,6 +681,7 @@ function ProgramEmptyState({ styles }) {
 export default function ProgramScreen({
   styles,
   scaledTypography,
+  authenticatedUser,
   programPassages,
   programBackButtonLabel,
   hasProgramPassages,
@@ -307,6 +692,24 @@ export default function ProgramScreen({
   onChangeProgramTitle,
   programNotes,
   onChangeProgramNotes,
+  programSessionDate,
+  onChangeProgramSessionDate,
+  programSessionTime,
+  onChangeProgramSessionTime,
+  programTimeZone,
+  onChangeProgramTimeZone,
+  defaultProgramTimeZone,
+  programFrequencyOptions,
+  programFrequency,
+  onSelectProgramFrequency,
+  programParticipants,
+  onChangeProgramParticipants,
+  programFacilitators,
+  onChangeProgramFacilitators,
+  includeCurrentUserFacilitator,
+  onRemoveCurrentUserFacilitator,
+  onRestoreCurrentUserFacilitator,
+  programFieldErrors,
   onShareProgram,
   onSubmitProgram,
   programSubmissionError,
@@ -316,6 +719,7 @@ export default function ProgramScreen({
   onSearchProgramTheme,
   onAddProgramSections,
 }) {
+  const [activeStep, setActiveStep] = useState(PROGRAM_STEPS[0].id);
   const [isThemeModalVisible, setIsThemeModalVisible] = useState(false);
   const [themeQuery, setThemeQuery] = useState('');
   const [themeSearchResults, setThemeSearchResults] = useState([]);
@@ -331,6 +735,29 @@ export default function ProgramScreen({
       ),
     [themeSearchResults, selectedThemeSectionIds],
   );
+
+  const activeStepIndex = useMemo(
+    () => PROGRAM_STEPS.findIndex(step => step.id === activeStep),
+    [activeStep],
+  );
+
+  const handleSelectStep = useCallback(stepId => {
+    setActiveStep(stepId);
+  }, []);
+
+  const handleNextStep = useCallback(() => {
+    const nextStep = PROGRAM_STEPS[activeStepIndex + 1];
+    if (nextStep) {
+      setActiveStep(nextStep.id);
+    }
+  }, [activeStepIndex]);
+
+  const handlePrevStep = useCallback(() => {
+    const prevStep = PROGRAM_STEPS[activeStepIndex - 1];
+    if (prevStep) {
+      setActiveStep(prevStep.id);
+    }
+  }, [activeStepIndex]);
 
   const handleOpenThemeModal = useCallback(() => {
     setIsThemeModalVisible(true);
@@ -430,49 +857,120 @@ export default function ProgramScreen({
     setIsThemeModalVisible(false);
   }, [onAddProgramSections, selectedSections, themeQuery]);
 
-  const renderProgramPassage = useCallback(
-    ({ item, index }) => (
+  const renderPassageList = useCallback(() => {
+    if (programPassages.length === 0) {
+      return <ProgramEmptyState styles={styles} />;
+    }
+    return programPassages.map((item, index) => (
       <ProgramPassageCard
+        key={item.id}
         styles={styles}
         item={item}
         index={index}
         renderBlockContent={renderBlockContent}
         onRemove={onRemoveFromProgram}
       />
-    ),
-    [styles, renderBlockContent, onRemoveFromProgram],
-  );
+    ));
+  }, [programPassages, renderBlockContent, onRemoveFromProgram, styles]);
+  const currentUserName =
+    authenticatedUser?.name ??
+    authenticatedUser?.email ??
+    authenticatedUser?.memberRef ??
+    authenticatedUser?.userId ??
+    null;
+  const currentUserId =
+    authenticatedUser?.memberRef ?? authenticatedUser?.userId ?? null;
 
-  const listHeaderComponent = (
-    <View>
-      <ProgramThemeGenerator
-        styles={styles}
-        onOpen={handleOpenThemeModal}
-        feedback={themeFeedback}
-      />
-      <ProgramForm
-        styles={styles}
-        programTitle={programTitle}
-        onChangeProgramTitle={onChangeProgramTitle}
-        programNotes={programNotes}
-        onChangeProgramNotes={onChangeProgramNotes}
-      />
-    </View>
-  );
+  const stepContent = useMemo(() => {
+    switch (activeStep) {
+      case 'program':
+        return (
+          <ProgramDetailsForm
+            styles={styles}
+            programTitle={programTitle}
+            onChangeProgramTitle={onChangeProgramTitle}
+            programNotes={programNotes}
+            onChangeProgramNotes={onChangeProgramNotes}
+            fieldErrors={programFieldErrors}
+          />
+        );
+      case 'devotional':
+        return (
+          <View style={styles.programStepSection}>
+            <ProgramThemeGenerator
+              styles={styles}
+              onOpen={handleOpenThemeModal}
+              feedback={themeFeedback}
+            />
+            <View style={styles.programPassageList}>{renderPassageList()}</View>
+          </View>
+        );
+      case 'session':
+        return (
+          <SessionDetailsForm
+            styles={styles}
+            sessionDate={programSessionDate}
+            onChangeSessionDate={onChangeProgramSessionDate}
+            sessionTime={programSessionTime}
+            onChangeSessionTime={onChangeProgramSessionTime}
+            timeZone={programTimeZone}
+            onChangeTimeZone={onChangeProgramTimeZone}
+            defaultTimeZone={defaultProgramTimeZone}
+            frequencyOptions={programFrequencyOptions}
+            selectedFrequency={programFrequency}
+            onSelectFrequency={onSelectProgramFrequency}
+            participantInput={programParticipants}
+            onChangeParticipantInput={onChangeProgramParticipants}
+            facilitatorInput={programFacilitators}
+            onChangeFacilitatorInput={onChangeProgramFacilitators}
+            fieldErrors={programFieldErrors}
+            currentUserName={currentUserName}
+            currentUserId={currentUserId}
+            includeCurrentUserFacilitator={includeCurrentUserFacilitator}
+            onRemoveCurrentUserFacilitator={onRemoveCurrentUserFacilitator}
+            onRestoreCurrentUserFacilitator={onRestoreCurrentUserFacilitator}
+          />
+        );
+      default:
+        return null;
+    }
+  }, [
+    activeStep,
+    defaultProgramTimeZone,
+    handleOpenThemeModal,
+    onChangeProgramNotes,
+    onChangeProgramParticipants,
+    onChangeProgramSessionDate,
+    onChangeProgramSessionTime,
+    onChangeProgramTimeZone,
+    onChangeProgramTitle,
+    onChangeProgramFacilitators,
+    onSelectProgramFrequency,
+    programFieldErrors,
+    programFrequency,
+    programFrequencyOptions,
+    programNotes,
+    programParticipants,
+    programSessionDate,
+    programSessionTime,
+    programTimeZone,
+    programTitle,
+    renderPassageList,
+    themeFeedback,
+    programFacilitators,
+    styles,
+    currentUserId,
+    currentUserName,
+    includeCurrentUserFacilitator,
+    onRemoveCurrentUserFacilitator,
+    onRestoreCurrentUserFacilitator,
+  ]);
 
-  const listFooterComponent = (
-    <ProgramActions
-      styles={styles}
-      hasProgramPassages={hasProgramPassages}
-      isSubmittingProgram={isSubmittingProgram}
-      onShareProgram={onShareProgram}
-      onSubmitProgram={onSubmitProgram}
-      programSubmissionError={programSubmissionError}
-      programSubmissionSuccess={programSubmissionSuccess}
-    />
-  );
-
-  const listEmptyComponent = <ProgramEmptyState styles={styles} />;
+  const canGoBack = activeStepIndex > 0;
+  const canGoNext = activeStepIndex < PROGRAM_STEPS.length - 1;
+  const nextStepLabel = canGoNext
+    ? PROGRAM_STEPS[activeStepIndex + 1].label
+    : null;
 
   return (
     <View style={styles.screenSurface}>
@@ -511,16 +1009,49 @@ export default function ProgramScreen({
       <Text style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}>
         Gather passages into a single flow before you share.
       </Text>
-      <FlatList
-        data={programPassages}
-        keyExtractor={item => item.id}
+      <ProgramStepper
+        styles={styles}
+        steps={PROGRAM_STEPS}
+        activeStep={activeStep}
+        onSelectStep={handleSelectStep}
+      />
+      <ScrollView
         style={styles.programList}
         contentContainerStyle={styles.programListContent}
-        renderItem={renderProgramPassage}
-        ListHeaderComponent={listHeaderComponent}
-        ListFooterComponent={listFooterComponent}
-        ListEmptyComponent={listEmptyComponent}
-      />
+      >
+        {stepContent}
+        <View style={styles.programStepControls}>
+          <TouchableOpacity
+            onPress={handlePrevStep}
+            style={[
+              styles.programStepControlButton,
+              !canGoBack && styles.buttonDisabled,
+            ]}
+            disabled={!canGoBack}
+          >
+            <Text style={styles.programStepControlLabel}>Back</Text>
+          </TouchableOpacity>
+          {canGoNext ? (
+            <TouchableOpacity
+              onPress={handleNextStep}
+              style={styles.programStepControlButtonPrimary}
+            >
+              <Text style={styles.programStepControlPrimaryLabel}>
+                Next{nextStepLabel ? `: ${nextStepLabel}` : ''}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+        </View>
+        <ProgramActions
+          styles={styles}
+          hasProgramPassages={hasProgramPassages}
+          isSubmittingProgram={isSubmittingProgram}
+          onShareProgram={onShareProgram}
+          onSubmitProgram={onSubmitProgram}
+          programSubmissionError={programSubmissionError}
+          programSubmissionSuccess={programSubmissionSuccess}
+        />
+      </ScrollView>
     </View>
   );
 }

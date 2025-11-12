@@ -310,6 +310,17 @@ export default function ShareEditorScreen({
 
     return typeof passageText === 'string' ? passageText.trim() : '';
   }, [sanitizedSelection, sentences, passageText]);
+  const shareAuthorLabel = useMemo(() => {
+    const rawAttribution =
+      typeof shareContext?.block?.attribution === 'string'
+        ? shareContext.block.attribution.trim()
+        : '';
+    if (rawAttribution.length > 0) {
+      const stripped = rawAttribution.replace(/^[—–-]+\s*/, '').trim();
+      return stripped.length > 0 ? stripped : rawAttribution;
+    }
+    return shareContext?.writingTitle ?? 'Bahai Writings';
+  }, [shareContext?.block?.attribution, shareContext?.writingTitle]);
 
   const baseParagraphStyle = scaledTypography?.contentParagraph ?? {};
   const calculatedQuoteSize = baseParagraphStyle.fontSize
@@ -318,6 +329,12 @@ export default function ShareEditorScreen({
   const calculatedQuoteLineHeight = baseParagraphStyle.lineHeight
     ? baseParagraphStyle.lineHeight * (activeLayout.lineHeightScale ?? activeLayout.quoteScale ?? 1)
     : undefined;
+  const resolvedQuoteLineHeight =
+    typeof calculatedQuoteLineHeight === 'number'
+      ? calculatedQuoteLineHeight
+      : typeof calculatedQuoteSize === 'number'
+        ? Math.round(calculatedQuoteSize * 1.35)
+        : 32;
 
   const handleCaptureMedia = useCallback(async () => {
     try {
@@ -517,11 +534,7 @@ export default function ShareEditorScreen({
         );
       case 'theme':
         return (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sharePaletteChipRow}
-          >
+          <View style={styles.sharePaletteChipRow}>
             {shareThemes.map(theme => {
               const isActive = theme.id === shareThemeId;
               const themeChipStyle = getThemeChipStyle(theme, isActive);
@@ -548,15 +561,11 @@ export default function ShareEditorScreen({
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
         );
       case 'font':
         return (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sharePaletteOptionRow}
-          >
+          <View style={styles.sharePaletteOptionRow}>
             {fontOptions.map(option => {
               const isSelected = option.id === fontId;
               return (
@@ -587,7 +596,7 @@ export default function ShareEditorScreen({
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
         );
       case 'textColor':
         return (
@@ -613,11 +622,7 @@ export default function ShareEditorScreen({
         );
       case 'background':
         return (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sharePaletteOptionRow}
-          >
+          <View style={styles.sharePaletteOptionRow}>
             {backgroundOptions.map(option => {
               const isSelected = option.id === backgroundId;
               return (
@@ -656,15 +661,11 @@ export default function ShareEditorScreen({
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
         );
       case 'layout':
         return (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sharePaletteLayoutRow}
-          >
+          <View style={styles.sharePaletteOptionRow}>
             {layoutOptions.map(option => {
               const isSelected = option.id === layoutId;
               const glyph =
@@ -711,7 +712,7 @@ export default function ShareEditorScreen({
                 </TouchableOpacity>
               );
             })}
-          </ScrollView>
+          </View>
         );
       default:
         return null;
@@ -726,9 +727,18 @@ export default function ShareEditorScreen({
     {
       color: activeTextColor,
       fontSize: calculatedQuoteSize,
-      lineHeight: calculatedQuoteLineHeight,
+      lineHeight: resolvedQuoteLineHeight,
     },
   ];
+
+  const previewBody = (
+    <View style={styles.sharePreviewBody}>
+      <Text style={previewQuoteStyle}>
+        {shareText || 'Select sentences to preview.'}
+      </Text>
+      {previewAttribution}
+    </View>
+  );
 
   const previewAttribution = (
     <View style={styles.sharePreviewAttribution}>
@@ -775,7 +785,7 @@ export default function ShareEditorScreen({
           { color: activeTextColor },
         ]}
       >
-        Bahai Writings
+        {shareAuthorLabel}
       </Text>
     </View>
   );
@@ -789,134 +799,137 @@ export default function ShareEditorScreen({
         title="Share"
       />
       <View style={styles.shareEditorBody}>
-        <View style={styles.sharePreviewWrapper}>
-          <View
-            style={[
-              styles.sharePreviewOuter,
-              capturedMedia
-                ? styles.sharePreviewOuterMedia
-                : { borderColor: activeBackground.borderColor },
-            ]}
-          >
-            <ViewShot
-              ref={viewShotRef}
-              style={styles.sharePreviewShot}
-              options={viewShotOptions}
+        <ScrollView
+          style={styles.sharePreviewScroll}
+          contentContainerStyle={styles.sharePreviewScrollContent}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.sharePreviewWrapper}>
+            <View
+              style={[
+                styles.sharePreviewOuter,
+                capturedMedia
+                  ? styles.sharePreviewOuterMedia
+                  : { borderColor: activeBackground.borderColor },
+              ]}
             >
-              {capturedMedia ? (
-                <View
-                  style={[styles.sharePreviewCard, styles.sharePreviewCardMedia]}
-                >
-                  {capturedMediaIsVideo ? (
-                    <View style={styles.sharePreviewMediaWrapper}>
-                      <Video
+              <ViewShot
+                ref={viewShotRef}
+                style={styles.sharePreviewShot}
+                options={viewShotOptions}
+              >
+                {capturedMedia ? (
+                  <View
+                    style={[styles.sharePreviewCard, styles.sharePreviewCardMedia]}
+                  >
+                    {capturedMediaIsVideo ? (
+                      <View style={styles.sharePreviewMediaWrapper}>
+                        <Video
+                          source={{ uri: capturedMedia.uri }}
+                          style={styles.sharePreviewVideo}
+                          resizeMode="cover"
+                          repeat
+                          muted
+                        />
+                        <View style={styles.sharePreviewOverlayLayer} />
+                      </View>
+                    ) : (
+                      <ImageBackground
                         source={{ uri: capturedMedia.uri }}
-                        style={styles.sharePreviewVideo}
-                        resizeMode="cover"
-                        repeat
-                        muted
-                      />
-                      <View style={styles.sharePreviewOverlayLayer} />
-                    </View>
-                  ) : (
-                    <ImageBackground
-                      source={{ uri: capturedMedia.uri }}
-                      style={styles.sharePreviewMediaWrapper}
-                      imageStyle={styles.sharePreviewImage}
+                        style={styles.sharePreviewMediaWrapper}
+                        imageStyle={styles.sharePreviewImage}
+                      >
+                        <View style={styles.sharePreviewOverlayLayer} />
+                      </ImageBackground>
+                    )}
+                    <View
+                      style={[
+                        styles.sharePreviewOverlayContent,
+                        activeLayout.contentStyle,
+                      ]}
                     >
-                      <View style={styles.sharePreviewOverlayLayer} />
-                    </ImageBackground>
-                  )}
+                      {previewBody}
+                      {previewFooter}
+                    </View>
+                  </View>
+                ) : (
                   <View
                     style={[
-                      styles.sharePreviewOverlayContent,
-                      activeLayout.contentStyle,
+                      styles.sharePreviewCard,
+                      { backgroundColor: activeBackground.backgroundColor },
                     ]}
                   >
-                    <Text style={previewQuoteStyle}>
-                      {shareText || 'Select sentences to preview.'}
-                    </Text>
-                    {previewAttribution}
+                    <View
+                      style={[
+                        styles.sharePreviewAccent,
+                        { backgroundColor: activeBackground.borderColor },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.sharePreviewAccentSecondary,
+                        { backgroundColor: activeBackground.borderColor },
+                      ]}
+                    />
+                    <View
+                      style={[
+                        styles.sharePreviewContent,
+                        activeLayout.contentStyle,
+                      ]}
+                    >
+                      {previewBody}
+                    </View>
                     {previewFooter}
                   </View>
-                </View>
-              ) : (
-                <View
-                  style={[
-                    styles.sharePreviewCard,
-                    { backgroundColor: activeBackground.backgroundColor },
-                  ]}
-                >
-                  <View
-                    style={[
-                      styles.sharePreviewAccent,
-                      { backgroundColor: activeBackground.borderColor },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.sharePreviewAccentSecondary,
-                      { backgroundColor: activeBackground.borderColor },
-                    ]}
-                  />
-                  <View
-                    style={[
-                      styles.sharePreviewContent,
-                      activeLayout.contentStyle,
-                    ]}
-                  >
-                    <Text style={previewQuoteStyle}>
-                      {shareText || 'Select sentences to preview.'}
-                    </Text>
-                    {previewAttribution}
-                  </View>
-                  {previewFooter}
-                </View>
-              )}
-            </ViewShot>
+                )}
+              </ViewShot>
+            </View>
           </View>
-        </View>
+        </ScrollView>
       </View>
-      <View style={styles.shareToolbar}>
-        <View style={styles.sharePaletteTabs}>
-          {paletteTabs.map(tab => {
-            const isActive = tab.id === activeTool;
-            return (
-              <TouchableOpacity
-                key={tab.id}
-                onPress={() => setActiveTool(tab.id)}
-                style={[
-                  styles.sharePaletteTab,
-                  isActive && styles.sharePaletteTabActive,
-                ]}
-                accessibilityRole="tab"
-                accessibilityLabel={tab.label}
-                accessibilityState={{ selected: isActive }}
-              >
-                <Ionicons
-                  name={tab.icon}
-                  size={20}
-                  color={isActive ? '#ffffff' : '#5a4524'}
-                  style={styles.sharePaletteTabIcon}
-                />
-              </TouchableOpacity>
-            );
-          })}
+      <View style={styles.shareEditorFooter}>
+        <View style={styles.shareToolbar}>
+          <View style={styles.sharePaletteTabs}>
+            {paletteTabs.map(tab => {
+              const isActive = tab.id === activeTool;
+              return (
+                <TouchableOpacity
+                  key={tab.id}
+                  onPress={() => setActiveTool(tab.id)}
+                  style={[
+                    styles.sharePaletteTab,
+                    isActive && styles.sharePaletteTabActive,
+                  ]}
+                  accessibilityRole="tab"
+                  accessibilityLabel={tab.label}
+                  accessibilityState={{ selected: isActive }}
+                >
+                  <Ionicons
+                    name={tab.icon}
+                    size={20}
+                    color={isActive ? '#ffffff' : '#5a4524'}
+                    style={styles.sharePaletteTabIcon}
+                  />
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          <View style={styles.shareToolbarContent}>{renderPaletteContent()}</View>
         </View>
-        <View style={styles.shareToolbarContent}>{renderPaletteContent()}</View>
+        <TouchableOpacity
+          onPress={handleOpenShareSheet}
+          style={[
+            styles.shareFloatingButton,
+            (!hasSelection || isCapturingMedia) && styles.shareFloatingButtonDisabled,
+          ]}
+          accessibilityRole="button"
+          accessibilityLabel="Choose where to share"
+          disabled={!hasSelection || isCapturingMedia}
+        >
+          <Ionicons name="paper-plane-outline" size={24} color="#ffffff" />
+        </TouchableOpacity>
       </View>
-      <TouchableOpacity
-        onPress={handleOpenShareSheet}
-        style={[
-          styles.shareFloatingButton,
-          (!hasSelection || isCapturingMedia) && styles.shareFloatingButtonDisabled,
-        ]}
-        accessibilityRole="button"
-        accessibilityLabel="Choose where to share"
-        disabled={!hasSelection || isCapturingMedia}
-      >
-        <Ionicons name="share-outline" size={24} color="#ffffff" />
-      </TouchableOpacity>
+
       <Modal
         visible={shareSheetVisible}
         transparent

@@ -36,16 +36,33 @@ import ProfileScreen from './screens/ProfileScreen';
 import MyVersesScreen from './screens/MyVersesScreen';
 import { BottomNavigationBar } from './components/BottomNavigationBar';
 import { createIconSetFromFontello } from 'react-native-vector-icons';
+import { jwtDecode } from 'jwt-decode';
+import {
+  createDevotionalActivity,
+  resolveDevotionalEndpoint,
+} from './services/activitiesService';
 
-const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT =
-  global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT ??
-  'https://liquidspirit.example.com/api/devotionals';
+const LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT = resolveDevotionalEndpoint();
 const SHARE_SELECTION_LIMIT = 2;
 const AUTH_STORAGE_KEY = 'bahai-writings-app/authState';
 const MY_VERSES_STORAGE_KEY = 'bahai-writings-app/myVerses';
 const BOTTOM_TAB_KEYS = ['home', 'search', 'profile', 'myVerses'];
 const BOTTOM_TAB_SET = new Set(BOTTOM_TAB_KEYS);
 const SEARCH_HIGHLIGHT_DURATION_MS = 2500;
+const PROGRAM_FREQUENCY_OPTIONS = [
+  { id: 'one-time', label: 'One-time' },
+  { id: 'weekly', label: 'Weekly' },
+  { id: 'monthly', label: 'Monthly' },
+];
+const WEEKDAY_LABELS = [
+  'Sunday',
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+];
 
 function resolveAuthToken(payload) {
   if (!payload || typeof payload !== 'object') {
@@ -205,6 +222,86 @@ function resolveUserEmail(payload, fallbackEmail = null) {
 
   const normalizedFallback = normalizeEmail(fallbackEmail);
   return normalizedFallback ?? '';
+}
+
+const MEMBER_REF_FIELDS = [
+  'memberRef',
+  'member_id',
+  'member',
+  'memberId',
+  'memberID',
+  'userId',
+  'user_id',
+  '_id',
+  'id',
+];
+
+// Normalize member references that might arrive as strings or ObjectId-like objects.
+const normalizeObjectIdValue = value => {
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  if (typeof value.$oid === 'string') {
+    const trimmed = value.$oid.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value.oid === 'string') {
+    const trimmed = value.oid.trim();
+    return trimmed.length > 0 ? trimmed : null;
+  }
+  if (typeof value.toString === 'function') {
+    return normalizeObjectIdValue(value.toString());
+  }
+  return null;
+};
+
+function collectMemberRefCandidates(target, addCandidate) {
+  if (!target || typeof target !== 'object') {
+    return;
+  }
+  MEMBER_REF_FIELDS.forEach(field => {
+    const normalized = normalizeObjectIdValue(target[field]);
+    if (normalized) {
+      addCandidate(normalized);
+    }
+  });
+}
+
+function resolveUserId(payload, token = null) {
+  const candidates = [];
+  const addCandidate = value => {
+    if (typeof value !== 'string') {
+      return;
+    }
+    const trimmed = value.trim();
+    if (!trimmed || candidates.includes(trimmed)) {
+      return;
+    }
+    candidates.push(trimmed);
+  };
+
+  collectMemberRefCandidates(payload, addCandidate);
+  collectMemberRefCandidates(payload?.user, addCandidate);
+  collectMemberRefCandidates(payload?.profile, addCandidate);
+  collectMemberRefCandidates(payload?.data, addCandidate);
+  collectMemberRefCandidates(payload?.data?.user, addCandidate);
+  collectMemberRefCandidates(payload?.auth, addCandidate);
+  collectMemberRefCandidates(payload?.auth?.user, addCandidate);
+
+  if (candidates.length === 0 && typeof token === 'string' && token.length > 0) {
+    try {
+      const decoded = jwtDecode(token);
+      collectMemberRefCandidates(decoded, addCandidate);
+    } catch (error) {
+      console.warn('[Auth] Unable to decode token while resolving user ID', error);
+    }
+  }
+
+  return candidates[0] ?? null;
 }
 
 let cachedAsyncStorage = null;
@@ -717,6 +814,12 @@ function AppContent() {
               : 'Kali';
           const storedToken =
             typeof persisted.token === 'string' ? persisted.token : null;
+          const storedMemberRef =
+            typeof persisted.memberRef === 'string' && persisted.memberRef.trim().length > 0
+              ? persisted.memberRef.trim()
+              : typeof persisted.userId === 'string' && persisted.userId.trim().length > 0
+                ? persisted.userId.trim()
+                : null;
 
           if (storedEmail) {
             setAuthEmail(storedEmail);
@@ -740,6 +843,8 @@ function AppContent() {
               email: storedEmail,
               token: storedToken,
               tokenExpiresAt: effectiveExpiresAt,
+              memberRef: storedMemberRef,
+              userId: storedMemberRef,
             });
             setAuthPassword('');
             setAuthError(null);
@@ -803,8 +908,23 @@ function AppContent() {
   const [programPassages, setProgramPassages] = useState([]);
   const [myVerses, setMyVerses] = useState([]);
   const [programReturnScreen, setProgramReturnScreen] = useState(null);
+  const defaultProgramTimeZone = useMemo(() => {
+    try {
+      return Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
+    } catch {
+      return 'UTC';
+    }
+  }, []);
   const [programTitle, setProgramTitle] = useState('');
   const [programNotes, setProgramNotes] = useState('');
+  const [programSessionDate, setProgramSessionDate] = useState('');
+  const [programSessionTime, setProgramSessionTime] = useState('');
+  const [programTimeZone, setProgramTimeZone] = useState(defaultProgramTimeZone);
+  const [programFrequency, setProgramFrequency] = useState(PROGRAM_FREQUENCY_OPTIONS[0].id);
+  const [programParticipants, setProgramParticipants] = useState('');
+  const [programFacilitators, setProgramFacilitators] = useState('');
+  const [includeCurrentUserAsFacilitator, setIncludeCurrentUserAsFacilitator] = useState(true);
+  const [programFieldErrors, setProgramFieldErrors] = useState({});
   const [isSubmittingProgram, setIsSubmittingProgram] = useState(false);
   const [programSubmissionError, setProgramSubmissionError] = useState(null);
   const [programSubmissionSuccess, setProgramSubmissionSuccess] = useState(null);
@@ -819,6 +939,9 @@ function AppContent() {
   const sectionViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 60,
   });
+  useEffect(() => {
+    setIncludeCurrentUserAsFacilitator(true);
+  }, [authenticatedUser?.memberRef, authenticatedUser?.userId]);
   const windowWidth = Dimensions.get('window').width;
   const sectionPageWidth = useMemo(() => {
     const horizontalInsets =
@@ -1333,6 +1456,10 @@ function AppContent() {
         email: trimmedEmail,
         password: authPassword,
       });
+      console.log('[Auth] Liquid Spirit login response:', {
+        keys: Object.keys(result ?? {}),
+        hasToken: Boolean(resolveAuthToken(result)),
+      });
       const normalizedEmailResponse = resolveUserEmail(result, trimmedEmail);
       const inferredName = resolveUserDisplayName(
         result,
@@ -1343,11 +1470,18 @@ function AppContent() {
         normalizeDisplayString(normalizedEmailResponse) ?? trimmedEmail;
       const token = resolveAuthToken(result);
       const tokenExpiresAt = inferAuthExpirationMs(result, token);
+      const memberRef = resolveUserId(result, token);
+      console.log('[Auth] MemberRef resolved on login', {
+        memberRef,
+        email: resolvedEmail,
+      });
       const normalizedUser = {
         name: inferredName,
         email: resolvedEmail,
         token,
         tokenExpiresAt: tokenExpiresAt ?? null,
+        memberRef: memberRef ?? null,
+        userId: memberRef ?? null,
       };
 
       if (!token) {
@@ -1878,11 +2012,51 @@ function AppContent() {
     setCurrentScreen(nextScreen);
   };
 
+  const setProgramFieldError = useCallback((field, message) => {
+    setProgramFieldErrors(previous => {
+      if (message) {
+        if (previous[field] === message) {
+          return previous;
+        }
+        return { ...previous, [field]: message };
+      }
+      if (!previous[field]) {
+        return previous;
+      }
+      const next = { ...previous };
+      delete next[field];
+      return next;
+    });
+  }, [setProgramFieldErrors]);
+
+  const clearProgramFieldError = useCallback(field => {
+    setProgramFieldError(field, null);
+  }, [setProgramFieldError]);
+
   const handleRemoveFromProgram = itemId => {
     setProgramPassages(previous =>
       previous.filter(item => item.id !== itemId),
     );
   };
+  const handleRemoveCurrentUserFacilitator = useCallback(() => {
+    setIncludeCurrentUserAsFacilitator(false);
+  }, []);
+
+  const handleRestoreCurrentUserFacilitator = useCallback(() => {
+    setIncludeCurrentUserAsFacilitator(true);
+  }, []);
+  const resetProgramMetadata = useCallback(() => {
+    setProgramTitle('');
+    setProgramNotes('');
+    setProgramSessionDate('');
+    setProgramSessionTime('');
+    setProgramTimeZone(defaultProgramTimeZone);
+    setProgramFrequency(PROGRAM_FREQUENCY_OPTIONS[0].id);
+    setProgramParticipants('');
+    setProgramFacilitators('');
+    setIncludeCurrentUserAsFacilitator(true);
+    setProgramFieldErrors({});
+  }, [defaultProgramTimeZone]);
 
   const handleRemoveFromMyVerses = verseId => {
     setMyVerses(previous => previous.filter(item => item.id !== verseId));
@@ -1892,6 +2066,8 @@ function AppContent() {
     setProgramPassages([]);
     setProgramSubmissionError(null);
     setProgramSubmissionSuccess(null);
+    resetProgramMetadata();
+    setProgramFieldErrors({});
   };
 
   const handleShareProgram = async () => {
@@ -1927,11 +2103,100 @@ function AppContent() {
     }
 
     const trimmedTitle = programTitle.trim();
+    const trimmedSessionDate = programSessionDate.trim();
+    const rawSessionTime = programSessionTime.trim();
+    const nextFieldErrors = {};
+
     if (trimmedTitle.length === 0) {
-      setProgramSubmissionError('Please add a devotional title before submitting.');
+      nextFieldErrors.title = 'Add a title so others know this devotional.';
+    }
+
+    if (trimmedSessionDate.length === 0) {
+      nextFieldErrors.sessionDate = 'Select the date for this devotional.';
+    } else if (!/^\d{4}-\d{2}-\d{2}$/.test(trimmedSessionDate)) {
+      nextFieldErrors.sessionDate = 'Use the YYYY-MM-DD format.';
+    }
+
+    let normalizedTime = null;
+    if (rawSessionTime.length === 0) {
+      nextFieldErrors.sessionTime = 'Choose a start time.';
+    } else {
+      const timeMatch = rawSessionTime.match(/^(\d{1,2}):(\d{2})$/);
+      if (!timeMatch) {
+        nextFieldErrors.sessionTime = 'Time must be in HH:MM (24-hour) format.';
+      } else {
+        const hours = Number(timeMatch[1]);
+        const minutes = Number(timeMatch[2]);
+        if (
+          Number.isNaN(hours) ||
+          Number.isNaN(minutes) ||
+          hours > 23 ||
+          minutes > 59
+        ) {
+          nextFieldErrors.sessionTime = 'Enter a valid 24-hour time.';
+        } else {
+          normalizedTime = `${String(hours).padStart(2, '0')}:${timeMatch[2]}`;
+        }
+      }
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      setProgramFieldErrors(nextFieldErrors);
+      setProgramSubmissionError('Please fix the highlighted fields.');
       setProgramSubmissionSuccess(null);
       return;
     }
+
+    setProgramFieldErrors({});
+
+    const sessionDateCandidate = new Date(`${trimmedSessionDate}T${normalizedTime}:00`);
+    if (Number.isNaN(sessionDateCandidate.getTime())) {
+      setProgramFieldErrors({
+        sessionDate: 'Session date or time looks invalid. Please adjust and try again.',
+      });
+      setProgramSubmissionError('Please fix the highlighted fields.');
+      setProgramSubmissionSuccess(null);
+      return;
+    }
+    const sessionDateIso = sessionDateCandidate.toISOString();
+    const sessionDayLabel =
+      WEEKDAY_LABELS[sessionDateCandidate.getDay()] ?? WEEKDAY_LABELS[0];
+
+    const normalizeListInput = value =>
+      (typeof value === 'string' ? value : '')
+        .split(/[,\n;]+/g)
+        .map(entry => entry.trim())
+        .filter(Boolean);
+
+    const participantList = normalizeListInput(programParticipants);
+    const facilitatorList = normalizeListInput(programFacilitators);
+    const facilitatorSet = new Set(facilitatorList);
+    const resolvedMemberRef =
+      typeof authenticatedUser?.memberRef === 'string'
+        ? authenticatedUser.memberRef.trim()
+        : typeof authenticatedUser?.userId === 'string'
+          ? authenticatedUser.userId.trim()
+          : '';
+    if (includeCurrentUserAsFacilitator && resolvedMemberRef.length > 0) {
+      facilitatorSet.add(resolvedMemberRef);
+    }
+    const normalizedFacilitators = Array.from(facilitatorSet).filter(Boolean);
+    const selectedFrequencyOption = PROGRAM_FREQUENCY_OPTIONS.find(
+      option => option.id === programFrequency,
+    );
+    const fallbackFrequencyLabel =
+      typeof programFrequency === 'string' && programFrequency.length > 0
+        ? programFrequency.charAt(0).toUpperCase() + programFrequency.slice(1)
+        : PROGRAM_FREQUENCY_OPTIONS[0]?.label ??
+          PROGRAM_FREQUENCY_OPTIONS[0]?.id ??
+          'One-time';
+    const frequencyLabel = selectedFrequencyOption?.label ?? fallbackFrequencyLabel;
+
+    const groupDetailsPayload = {
+      day: sessionDayLabel,
+      time: normalizedTime,
+      frequency: frequencyLabel,
+    };
 
     if (!LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT) {
       setProgramSubmissionError(
@@ -1945,9 +2210,21 @@ function AppContent() {
     setProgramSubmissionError(null);
     setProgramSubmissionSuccess(null);
 
+    const descriptionSegments = [];
+    const trimmedNotes = programNotes.trim();
+    if (trimmedNotes) {
+      descriptionSegments.push(trimmedNotes, '', 'Created with Kali');
+    } else {
+      descriptionSegments.push('Created with Kali');
+    }
+    const descriptionText = descriptionSegments
+      .map(entry => entry.trimEnd())
+      .join('\n')
+      .trim();
+
     const payload = {
       title: trimmedTitle,
-      notes: programNotes.trim(),
+      ...(descriptionText ? { description: descriptionText } : {}),
       passages: programPassages.map(item => ({
         blockId: item.block.id,
         text: item.block.text,
@@ -1961,38 +2238,41 @@ function AppContent() {
         attribution: item.block.attribution ?? null,
         footnotes: item.block.footnotes ?? [],
       })),
+      sessionDate: sessionDateIso,
+      sessionTime: normalizedTime,
+      timeZone:
+        typeof programTimeZone === 'string' && programTimeZone.trim().length > 0
+          ? programTimeZone.trim()
+          : undefined,
+      frequency: programFrequency,
+      groupDetails: groupDetailsPayload,
+      participants: participantList,
+      facilitators: normalizedFacilitators,
     };
 
+    console.log('[Program] submitting devotional payload', {
+      endpoint: LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT,
+      passageCount: payload.passages.length,
+      sessionDate: payload.sessionDate,
+      sessionTime: payload.sessionTime,
+      frequency: payload.frequency,
+      hasParticipants: Array.isArray(payload.participants)
+        ? payload.participants.length
+        : 0,
+      hasFacilitators: Array.isArray(payload.facilitators)
+        ? payload.facilitators.length
+        : 0,
+    });
+
     try {
-      const response = await fetch(LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT, {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      const responseBody = await createDevotionalActivity(payload, {
+        token: authenticatedUser?.token,
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(
-          errorText || `Request failed with status ${response.status}`,
-        );
-      }
-
-      let responseBody = null;
-      try {
-        responseBody = await response.json();
-      } catch (parseError) {
-        responseBody = null;
-      }
-
       setProgramSubmissionSuccess(
         responseBody?.message ??
           'Devotional submitted to Liquid Spirit. Look for it on the activities dashboard.',
       );
-      setProgramTitle('');
-      setProgramNotes('');
+      resetProgramMetadata();
       setProgramPassages([]);
       Alert.alert(
         'Devotional submitted',
@@ -2011,6 +2291,7 @@ function AppContent() {
 
   const handleProgramTitleChange = text => {
     setProgramTitle(text);
+    clearProgramFieldError('title');
     if (text.trim().length > 0) {
       setProgramSubmissionError(null);
       setProgramSubmissionSuccess(null);
@@ -2020,6 +2301,21 @@ function AppContent() {
   const handleProgramNotesChange = text => {
     setProgramNotes(text);
     setProgramSubmissionSuccess(null);
+  };
+
+  const handleProgramSessionDateChange = value => {
+    setProgramSessionDate(value);
+    clearProgramFieldError('sessionDate');
+  };
+
+  const handleProgramSessionTimeChange = value => {
+    setProgramSessionTime(value);
+    clearProgramFieldError('sessionTime');
+  };
+
+  const handleProgramTimeZoneChange = value => {
+    setProgramTimeZone(value);
+    clearProgramFieldError('timeZone');
   };
 
   const handleSelectShareTheme = themeId => {
@@ -2478,6 +2774,7 @@ function AppContent() {
         <ProgramScreen
           styles={styles}
           scaledTypography={scaledTypography}
+          authenticatedUser={authenticatedUser}
           programPassages={programPassages}
           programBackButtonLabel={programBackButtonLabel}
           hasProgramPassages={hasProgramPassages}
@@ -2488,6 +2785,24 @@ function AppContent() {
           onChangeProgramTitle={handleProgramTitleChange}
           programNotes={programNotes}
           onChangeProgramNotes={handleProgramNotesChange}
+          programSessionDate={programSessionDate}
+          onChangeProgramSessionDate={handleProgramSessionDateChange}
+          programSessionTime={programSessionTime}
+          onChangeProgramSessionTime={handleProgramSessionTimeChange}
+          programTimeZone={programTimeZone}
+          onChangeProgramTimeZone={handleProgramTimeZoneChange}
+          defaultProgramTimeZone={defaultProgramTimeZone}
+          programFrequencyOptions={PROGRAM_FREQUENCY_OPTIONS}
+          programFrequency={programFrequency}
+          onSelectProgramFrequency={setProgramFrequency}
+          programParticipants={programParticipants}
+          onChangeProgramParticipants={setProgramParticipants}
+          programFacilitators={programFacilitators}
+          onChangeProgramFacilitators={setProgramFacilitators}
+          includeCurrentUserFacilitator={includeCurrentUserAsFacilitator}
+          onRemoveCurrentUserFacilitator={handleRemoveCurrentUserFacilitator}
+          onRestoreCurrentUserFacilitator={handleRestoreCurrentUserFacilitator}
+          programFieldErrors={programFieldErrors}
           onShareProgram={handleShareProgram}
           onSubmitProgram={handleSubmitProgram}
           programSubmissionError={programSubmissionError}
@@ -2608,6 +2923,13 @@ function AppContent() {
           styles={styles}
           displayName={displayName}
           email={authenticatedUser?.email ?? authEmail ?? ''}
+          memberRef={
+            typeof authenticatedUser?.memberRef === 'string'
+              ? authenticatedUser.memberRef
+              : typeof authenticatedUser?.userId === 'string'
+                ? authenticatedUser.userId
+                : ''
+          }
           isAuthenticated={Boolean(authenticatedUser)}
         />
       );
@@ -3150,6 +3472,98 @@ const styles = StyleSheet.create({
   programListContent: {
     paddingBottom: 32,
   },
+  programStepper: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+    marginBottom: 12,
+  },
+  programStepItem: {
+    alignItems: 'center',
+    marginHorizontal: 4,
+  },
+  programStepNode: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 2,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fffaf3',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  programStepNodeCompleted: {
+    borderColor: '#6d9c7c',
+    backgroundColor: '#6d9c7c',
+  },
+  programStepNodeActive: {
+    borderColor: '#3b2a15',
+  },
+  programStepNodeLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#b8a58b',
+  },
+  programStepNodeLabelActive: {
+    color: '#fffaf3',
+  },
+  programStepLabel: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6f5a35',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  programStepLabelActive: {
+    color: '#3b2a15',
+  },
+  programStepConnector: {
+    flex: 1,
+    height: 2,
+    backgroundColor: '#e0d2bd',
+    marginHorizontal: 8,
+  },
+  programStepConnectorCompleted: {
+    backgroundColor: '#6d9c7c',
+  },
+  programStepSection: {
+    width: '100%',
+  },
+  programPassageList: {
+    marginTop: 12,
+  },
+  programStepControls: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  programStepControlButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fffaf3',
+  },
+  programStepControlButtonPrimary: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+    backgroundColor: '#3b2a15',
+  },
+  programStepControlLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  programStepControlPrimaryLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fffaf3',
+  },
   myVersesList: {
     flex: 1,
     marginTop: 16,
@@ -3208,11 +3622,49 @@ const styles = StyleSheet.create({
     color: '#6f5a35',
     marginBottom: 16,
   },
+  programFieldRow: {
+    flexDirection: 'row',
+    columnGap: 12,
+  },
+  programFieldColumn: {
+    flex: 1,
+  },
   programInputLabel: {
     fontSize: 14,
     fontWeight: '600',
     color: '#3b2a15',
     marginBottom: 6,
+  },
+  programHelperText: {
+    fontSize: 12,
+    color: '#8a7752',
+    marginTop: -8,
+    marginBottom: 12,
+  },
+  programPickerInput: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    backgroundColor: '#fffaf3',
+    justifyContent: 'center',
+    marginBottom: 16,
+  },
+  programPickerValue: {
+    fontSize: 16,
+    color: '#3b2a15',
+  },
+  programPickerPlaceholder: {
+    fontSize: 16,
+    color: '#b8a58b',
+  },
+  programInputError: {
+    fontSize: 12,
+    color: '#a83c38',
+    marginTop: -8,
+    marginBottom: 12,
+    alignSelf: 'flex-start',
   },
   programTextInput: {
     borderWidth: 1,
@@ -3227,6 +3679,119 @@ const styles = StyleSheet.create({
   },
   programTextArea: {
     minHeight: 96,
+  },
+  programFrequencyRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 8,
+    rowGap: 8,
+    marginBottom: 16,
+  },
+  programFrequencyChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fffaf3',
+  },
+  programFrequencyChipActive: {
+    backgroundColor: '#3b2a15',
+    borderColor: '#3b2a15',
+  },
+  programFrequencyChipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  programFrequencyChipLabelActive: {
+    color: '#fffaf3',
+  },
+  programFacilitatorChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 12,
+  },
+  programFacilitatorChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 16,
+    backgroundColor: '#f0e4d2',
+  },
+  programFacilitatorChipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  programFacilitatorChipRemove: {
+    marginLeft: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 12,
+    backgroundColor: '#e3d4bd',
+  },
+  programFacilitatorChipRemoveLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#5a3d1d',
+  },
+  programFacilitatorChipRestore: {
+    alignSelf: 'flex-start',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fffaf3',
+    marginBottom: 8,
+  },
+  programFacilitatorChipRestoreLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  programPickerModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    justifyContent: 'center',
+    padding: 24,
+  },
+  programPickerModalCard: {
+    borderRadius: 20,
+    backgroundColor: '#fffaf3',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    alignSelf: 'stretch',
+  },
+  programPickerModalWheel: {
+    width: '100%',
+    height: 220,
+  },
+  programPickerModalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    columnGap: 12,
+    marginTop: 12,
+  },
+  programPickerModalButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: '#f0e4d2',
+  },
+  programPickerModalButtonPrimary: {
+    backgroundColor: '#3b2a15',
+  },
+  programPickerModalButtonLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  programPickerModalButtonPrimaryLabel: {
+    color: '#fffaf3',
   },
   programCardHeader: {
     flexDirection: 'row',
@@ -3663,13 +4228,20 @@ const styles = StyleSheet.create({
     color: '#6f5a35',
     marginTop: 6,
   },
-  sharePreviewWrapper: {
+  sharePreviewScroll: {
     flex: 1,
+    width: '100%',
+  },
+  sharePreviewScrollContent: {
+    flexGrow: 1,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+  },
+  sharePreviewWrapper: {
     width: '100%',
     justifyContent: 'center',
     alignItems: 'stretch',
-    paddingVertical: 12,
-    paddingHorizontal: 8,
   },
   sharePreviewOuter: {
     width: '100%',
@@ -3684,6 +4256,7 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
     alignSelf: 'center',
+    flexShrink: 0,
   },
   sharePreviewOuterMedia: {
     borderColor: 'transparent',
@@ -3693,6 +4266,7 @@ const styles = StyleSheet.create({
     minHeight: 320,
     borderRadius: 24,
     overflow: 'hidden',
+    flexShrink: 0,
   },
   sharePreviewCard: {
     width: '100%',
@@ -3756,10 +4330,17 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     zIndex: 1,
   },
+  sharePreviewBody: {
+    width: '100%',
+    flexShrink: 1,
+  },
   sharePreviewQuote: {
+    width: '100%',
     fontSize: 20,
     lineHeight: 32,
     fontWeight: '500',
+    flexShrink: 1,
+    marginBottom: 12,
   },
   sharePreviewAttribution: {
     marginTop: 24,
@@ -3911,14 +4492,22 @@ const styles = StyleSheet.create({
   sharePaletteTabIcon: {
     textAlign: 'center',
   },
+  shareEditorFooter: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+  },
   shareToolbar: {
+    flex: 1,
+    minWidth: 0,
     borderRadius: 18,
     borderWidth: 1,
     borderColor: '#d7c5a8',
     backgroundColor: '#f8f2e7',
     paddingVertical: 12,
     paddingHorizontal: 10,
-    marginBottom: 16,
   },
   shareToolbarTabs: {
     flexDirection: 'row',
@@ -4019,8 +4608,12 @@ const styles = StyleSheet.create({
     paddingBottom: 12,
   },
   sharePaletteChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingHorizontal: 4,
     paddingVertical: 4,
+    rowGap: 8,
+    columnGap: 8,
   },
   sharePaletteChip: {
     marginBottom: 0,
@@ -4028,12 +4621,17 @@ const styles = StyleSheet.create({
   },
   sharePaletteOptionRow: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     paddingVertical: 4,
     paddingHorizontal: 6,
+    columnGap: 8,
+    rowGap: 12,
+    justifyContent: 'flex-start',
   },
   sharePaletteCompactOption: {
     width: 68,
-    marginHorizontal: 6,
+    marginHorizontal: 4,
+    marginBottom: 4,
     alignItems: 'center',
   },
   sharePaletteCompactSwatch: {
@@ -4251,9 +4849,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
   },
   shareFloatingButton: {
-    position: 'absolute',
-    right: 24,
-    bottom: 24,
     width: 56,
     height: 56,
     borderRadius: 28,
@@ -4262,6 +4857,7 @@ const styles = StyleSheet.create({
     borderColor: '#b18d5c',
     alignItems: 'center',
     justifyContent: 'center',
+    alignSelf: 'flex-end',
     shadowColor: '#000000',
     shadowOpacity: 0.2,
     shadowRadius: 8,
