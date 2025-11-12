@@ -45,6 +45,7 @@ const AUTH_STORAGE_KEY = 'bahai-writings-app/authState';
 const MY_VERSES_STORAGE_KEY = 'bahai-writings-app/myVerses';
 const BOTTOM_TAB_KEYS = ['home', 'search', 'profile', 'myVerses'];
 const BOTTOM_TAB_SET = new Set(BOTTOM_TAB_KEYS);
+const SEARCH_HIGHLIGHT_DURATION_MS = 2500;
 
 function resolveAuthToken(payload) {
   if (!payload || typeof payload !== 'object') {
@@ -418,6 +419,13 @@ function cleanBlockText(block) {
   return normalized;
 }
 
+function escapeRegExp(value) {
+  if (typeof value !== 'string' || value.length === 0) {
+    return '';
+  }
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function normalizeSectionBlocks(section, fallbackSectionId, fallbackText = '') {
   const ensureId = (value, index) =>
     value ?? `${fallbackSectionId}-block-${index + 1}`;
@@ -570,13 +578,16 @@ function AppContent() {
                   ? block.text
                   : '';
               const normalized = cleanBlockText(shareSource);
-              return normalized.length > 0
-                ? normalized
-                : cleanBlockText(typeof block?.text === 'string' ? block.text : '');
+              const fallbackText =
+                typeof block?.text === 'string' ? block.text : '';
+              const cleanedFallback = cleanBlockText(fallbackText);
+              return normalized.length > 0 ? normalized : cleanedFallback;
             })
-            .filter(Boolean);
+            .map(text => text ?? '');
+          const normalizedBlockTexts = blockTexts.map(text => text.toLowerCase());
+          const filteredBlockTexts = blockTexts.filter(text => text.length > 0);
 
-          if (blockTexts.length === 0) {
+          if (filteredBlockTexts.length === 0) {
             return null;
           }
 
@@ -587,8 +598,11 @@ function AppContent() {
             sectionId: section.id,
             sectionTitle: section.title,
             blocks: section.blocks,
-            searchableText: blockTexts.join(' ').toLowerCase(),
-            preview: blockTexts[0],
+            searchableText: normalizedBlockTexts
+              .filter(text => text.length > 0)
+              .join(' '),
+            preview: filteredBlockTexts[0],
+            blockSearchTexts: normalizedBlockTexts,
           };
         })
         .filter(Boolean);
@@ -797,7 +811,10 @@ function AppContent() {
   const [reflectionModalContext, setReflectionModalContext] = useState(null);
   const [reflectionInput, setReflectionInput] = useState('');
   const [sectionBlockIndex, setSectionBlockIndex] = useState(0);
+  const [activeSearchHighlight, setActiveSearchHighlight] = useState(null);
   const sectionPagerRef = useRef(null);
+  const pendingSectionBlockIndexRef = useRef(null);
+  const searchHighlightTimeoutRef = useRef(null);
   const hasHydratedMyVersesRef = useRef(false);
   const sectionViewabilityConfig = useRef({
     viewAreaCoveragePercentThreshold: 60,
@@ -921,6 +938,14 @@ function AppContent() {
 
     persistMyVerses();
   }, [myVerses]);
+
+  useEffect(() => {
+    return () => {
+      if (searchHighlightTimeoutRef.current) {
+        clearTimeout(searchHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
   const shareBackButtonLabel = useMemo(() => {
     if (!shareContext) {
       return 'Back';
@@ -1004,14 +1029,48 @@ function AppContent() {
   }, [selectedWriting, writingSections]);
 
   useEffect(() => {
-    setSectionBlockIndex(0);
-    if (sectionPagerRef.current) {
+    const nextIndex =
+      typeof pendingSectionBlockIndexRef.current === 'number' &&
+      pendingSectionBlockIndexRef.current >= 0
+        ? pendingSectionBlockIndexRef.current
+        : 0;
+
+    let scrollTimeout = null;
+    let scrollAttempts = 0;
+
+    const attemptScroll = () => {
+      if (!sectionPagerRef.current) {
+        return false;
+      }
+      setSectionBlockIndex(nextIndex);
       sectionPagerRef.current.scrollToOffset({
-        offset: 0,
+        offset: sectionPageWidth * nextIndex,
         animated: false,
       });
+      pendingSectionBlockIndexRef.current = null;
+      return true;
+    };
+
+    if (!attemptScroll()) {
+      pendingSectionBlockIndexRef.current = nextIndex;
+      const retryScroll = () => {
+        if (attemptScroll()) {
+          return;
+        }
+        scrollAttempts += 1;
+        if (scrollAttempts < 5) {
+          scrollTimeout = setTimeout(retryScroll, 100);
+        }
+      };
+      scrollTimeout = setTimeout(retryScroll, 100);
     }
-  }, [selectedSectionId]);
+
+    return () => {
+      if (scrollTimeout) {
+        clearTimeout(scrollTimeout);
+      }
+    };
+  }, [selectedSectionId, sectionPageWidth]);
 
   const handleSelectWriting = writingId => {
     setSelectedWritingId(writingId);
@@ -1022,6 +1081,112 @@ function AppContent() {
     setSelectedSectionId(sectionId);
     setCurrentScreen('section');
   };
+
+  const activateSearchHighlight = useCallback(
+    ({
+      writingId,
+      sectionId,
+      blockId,
+      query,
+      matchIndex,
+      blockTextLength,
+    }) => {
+      if (searchHighlightTimeoutRef.current) {
+        clearTimeout(searchHighlightTimeoutRef.current);
+      }
+
+      const trimmedQuery =
+        typeof query === 'string' ? query.trim() : '';
+
+      if (!blockId || trimmedQuery.length === 0) {
+        setActiveSearchHighlight(null);
+        searchHighlightTimeoutRef.current = null;
+        return;
+      }
+
+      const normalizedTerm = trimmedQuery.toLowerCase();
+      const safeMatchIndex =
+        typeof matchIndex === 'number' && matchIndex >= 0
+          ? matchIndex
+          : 0;
+      const safeBlockLength =
+        typeof blockTextLength === 'number' && blockTextLength > 0
+          ? blockTextLength
+          : 0;
+
+      setActiveSearchHighlight({
+        writingId,
+        sectionId,
+        blockId,
+        term: trimmedQuery,
+        normalizedTerm,
+        matchIndex: safeMatchIndex,
+        blockTextLength: safeBlockLength,
+      });
+
+      searchHighlightTimeoutRef.current = setTimeout(() => {
+        setActiveSearchHighlight(null);
+        searchHighlightTimeoutRef.current = null;
+      }, SEARCH_HIGHLIGHT_DURATION_MS);
+    },
+    [],
+  );
+
+  const handleOpenSearchResult = useCallback(
+    ({
+      writingId,
+      sectionId,
+      blockId,
+      blockIndex = 0,
+      query,
+      matchIndex,
+      blockTextLength,
+    }) => {
+      if (!writingId || !sectionId) {
+        return;
+      }
+
+      const normalizedBlockIndex =
+        typeof blockIndex === 'number' && blockIndex >= 0
+          ? blockIndex
+          : 0;
+      pendingSectionBlockIndexRef.current = normalizedBlockIndex;
+
+      const isAlreadyViewingSection =
+        currentScreen === 'section' &&
+        selectedWritingId === writingId &&
+        selectedSectionId === sectionId;
+
+      if (isAlreadyViewingSection && sectionPagerRef.current) {
+        pendingSectionBlockIndexRef.current = null;
+        setSectionBlockIndex(normalizedBlockIndex);
+        sectionPagerRef.current.scrollToOffset({
+          offset: sectionPageWidth * normalizedBlockIndex,
+          animated: true,
+        });
+      } else {
+        setSelectedWritingId(writingId);
+        setSelectedSectionId(sectionId);
+      }
+
+      setCurrentScreen('section');
+      activateSearchHighlight({
+        writingId,
+        sectionId,
+        blockId,
+        query,
+        matchIndex,
+        blockTextLength,
+      });
+    },
+    [
+      activateSearchHighlight,
+      currentScreen,
+      sectionPageWidth,
+      selectedSectionId,
+      selectedWritingId,
+    ],
+  );
 
   const handleShowRandomPassage = () => {
     if (availablePassages.length === 0) {
@@ -1925,12 +2090,55 @@ function AppContent() {
     const normalizedBlockText =
       typeof block.text === 'string' ? block.text.trim() : '';
     const canOpenReflection = normalizedBlockText.length > 0;
+    const isHighlightedBlock =
+      activeSearchHighlight &&
+      activeSearchHighlight.blockId === block.id &&
+      activeSearchHighlight.sectionId === selectedSectionId &&
+      activeSearchHighlight.writingId === selectedWritingId;
+    const highlightTerm =
+      isHighlightedBlock && activeSearchHighlight.normalizedTerm
+        ? activeSearchHighlight.normalizedTerm
+        : null;
+
+    const renderHighlightedContent = text => {
+      if (
+        !highlightTerm ||
+        typeof text !== 'string' ||
+        text.length === 0
+      ) {
+        return text;
+      }
+      try {
+        const regex = new RegExp(`(${escapeRegExp(highlightTerm)})`, 'ig');
+        return text.split(regex).map((part, idx) => {
+          if (part.length === 0) {
+            return null;
+          }
+          if (part.toLowerCase() === highlightTerm) {
+            return (
+              <Text
+                key={`${block.id}-highlight-${idx}`}
+                style={styles.searchHighlightText}
+              >
+                {part}
+              </Text>
+            );
+          }
+          return part;
+        });
+      } catch (error) {
+        return text;
+      }
+    };
 
     const wrapBlock = (
       children,
       wrapperStyle = [styles.blockContainer, index === 0 && styles.firstBlock],
     ) => {
-      const styleArray = wrapperStyle.filter(Boolean);
+      const baseStyles = Array.isArray(wrapperStyle)
+        ? wrapperStyle
+        : [wrapperStyle];
+      const styleArray = baseStyles.filter(Boolean);
       if (canOpenReflection) {
         return (
           <TouchableOpacity
@@ -1968,7 +2176,7 @@ function AppContent() {
       if (!numberMatch) {
         return (
           <Text key={key} style={style}>
-            {text}
+            {renderHighlightedContent(text)}
           </Text>
         );
       }
@@ -1997,7 +2205,7 @@ function AppContent() {
             {number}
           </Text>
           {normalizedDelimiter}
-          {remainder}
+          {renderHighlightedContent(remainder)}
         </Text>
       );
     };
@@ -2048,7 +2256,7 @@ function AppContent() {
             scaledTypography.contentHeading,
           ]}
         >
-          {block.text}
+          {renderHighlightedContent(block.text)}
         </Text>
       );
     }
@@ -2059,7 +2267,7 @@ function AppContent() {
         <>
           <View style={[styles.quoteBlock, index === 0 && styles.firstBlock]}>
             <Text style={[styles.quoteText, scaledTypography.quoteText]}>
-              {block.text}
+              {renderHighlightedContent(block.text)}
             </Text>
           </View>
           {meta}
@@ -2326,6 +2534,7 @@ function AppContent() {
             scaledTypography={scaledTypography}
             selectedWriting={selectedWriting}
             selectedSection={selectedSection}
+            activeSearchHighlight={activeSearchHighlight}
             sectionBlockIndex={sectionBlockIndex}
             onBack={handleBackToSections}
             sectionPagerRef={sectionPagerRef}
@@ -2384,7 +2593,14 @@ function AppContent() {
       }
       break;
     case 'search':
-      screenContent = <SearchScreen styles={styles} />;
+      screenContent = (
+        <SearchScreen
+          styles={styles}
+          scaledTypography={scaledTypography}
+          searchableSections={searchableSections}
+          onSelectSection={handleOpenSearchResult}
+        />
+      );
       break;
     case 'profile':
       screenContent = (
@@ -2781,6 +2997,88 @@ const styles = StyleSheet.create({
     color: '#6f5a35',
     marginTop: -4,
     marginBottom: 20,
+  },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 14,
+    backgroundColor: '#fffaf3',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    fontSize: 16,
+    color: '#3b2a15',
+    marginBottom: 12,
+  },
+  searchDivider: {
+    borderBottomWidth: 1,
+    borderColor: '#e6d9c4',
+    marginBottom: 16,
+  },
+  searchResultCount: {
+    fontSize: 13,
+    color: '#6f5a35',
+    marginBottom: 12,
+  },
+  searchResultsList: {
+    flex: 1,
+  },
+  searchResultsListContent: {
+    paddingBottom: 24,
+  },
+  searchResultCard: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#f7f0e3',
+    marginBottom: 12,
+  },
+  searchResultTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#2c1f0c',
+  },
+  searchResultWriting: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginTop: 4,
+  },
+  searchResultPreview: {
+    fontSize: 14,
+    color: '#3b2a15',
+    marginTop: 10,
+  },
+  searchHighlightText: {
+    backgroundColor: '#f4d98a',
+    borderRadius: 4,
+    paddingHorizontal: 2,
+  },
+  recentSearchesWrapper: {
+    paddingTop: 8,
+  },
+  recentSearchHeading: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#6f5a35',
+    marginBottom: 10,
+  },
+  recentSearchChips: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+  },
+  recentSearchChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#f7f0e3',
+    marginRight: 8,
+    marginBottom: 8,
+  },
+  recentSearchChipLabel: {
+    fontSize: 14,
+    color: '#3b2a15',
   },
   sectionList: {
     flex: 1,
