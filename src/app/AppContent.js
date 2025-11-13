@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigationContainerRef } from '@react-navigation/native';
+import { CardStyleInterpolators } from '@react-navigation/stack';
 import writingsManifest from '../../assets/generated/writings.json';
 import StartScreen from '../screens/StartScreen';
 import SignInScreen from '../screens/SignInScreen';
@@ -158,6 +159,7 @@ function AppContent() {
   const navigationRef = useNavigationContainerRef();
   const [isNavigationReady, setIsNavigationReady] = useState(false);
   const pendingNavigationRef = useRef(null);
+  const suppressBackAnimationRef = useRef(false);
   const [currentScreen, setCurrentScreen] = useState('start');
   const [activeBottomTab, setActiveBottomTab] = useState('home');
   const [selectedWritingId, setSelectedWritingId] = useState(null);
@@ -286,12 +288,15 @@ function AppContent() {
     if (initialRoute?.name) {
       setCurrentScreen(initialRoute.name);
     }
-  }, [navigationRef]);
+  }, [navigationRef, suppressBackAnimationRef]);
   const handleNavigationStateChange = useCallback(() => {
     const nextRouteName = navigationRef.getCurrentRoute()?.name;
     if (nextRouteName) {
-      setCurrentScreen(previous => (previous === nextRouteName ? previous : nextRouteName));
+      setCurrentScreen(previous =>
+        previous === nextRouteName ? previous : nextRouteName,
+      );
     }
+    suppressBackAnimationRef.current = false;
   }, [navigationRef]);
   useEffect(() => {
     return () => {
@@ -624,12 +629,13 @@ function AppContent() {
 
   const handleBottomTabPress = useCallback(
     tabKey => {
-      if (!BOTTOM_TAB_SET.has(tabKey)) {
+      if (!BOTTOM_TAB_SET.has(tabKey) || tabKey === currentScreen) {
         return;
       }
+      suppressBackAnimationRef.current = true;
       navigateToScreen(tabKey);
     },
-    [navigateToScreen],
+    [currentScreen, navigateToScreen, suppressBackAnimationRef],
   );
 
   const handleCloseReflectionModal = useCallback(() => {
@@ -1277,9 +1283,18 @@ function AppContent() {
       gestureEnabled: true,
       fullScreenGestureEnabled: true,
       gestureDirection: 'horizontal',
-      animation: 'slide_from_right',
+      cardStyleInterpolator: props => {
+        if (props.closing && !suppressBackAnimationRef.current) {
+          return CardStyleInterpolators.forHorizontalIOS(props);
+        }
+        return {
+          cardStyle: {
+            transform: [{ translateX: 0 }],
+          },
+        };
+      },
     }),
-    [],
+    [suppressBackAnimationRef],
   );
 
   if (!hasHydratedAuth) {
