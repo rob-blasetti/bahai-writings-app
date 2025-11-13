@@ -1,12 +1,15 @@
 import React, { Fragment, useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { NavigationTopBar } from '../components/NavigationTopBar';
-import { extractPassageSentences, getShareableBlockText } from './shareUtils';
+import {
+  extractPassageSentences,
+  getShareableBlockText,
+} from '../sharing/shareUtils';
 
 export default function ShareSelectionScreen({
   styles,
   scaledTypography,
-  shareContext,
+  shareSession,
   shareBackButtonLabel,
   selectedSentenceIndexes,
   onToggleSentence,
@@ -15,12 +18,12 @@ export default function ShareSelectionScreen({
   maxSelections = 2,
 }) {
   const sentences = useMemo(() => {
-    if (Array.isArray(shareContext?.sentences)) {
-      return shareContext.sentences;
+    if (Array.isArray(shareSession?.sentences)) {
+      return shareSession.sentences;
     }
-    const fallbackText = getShareableBlockText(shareContext?.block);
+    const fallbackText = getShareableBlockText(shareSession?.block);
     return extractPassageSentences(fallbackText);
-  }, [shareContext?.sentences, shareContext?.block]);
+  }, [shareSession?.sentences, shareSession?.block]);
 
   const normalizedSelection = useMemo(() => {
     if (!Array.isArray(selectedSentenceIndexes)) {
@@ -52,11 +55,11 @@ export default function ShareSelectionScreen({
       </Text>
       <View style={styles.shareSelectionInfoRow}>
         <Text style={styles.shareSelectionSourceLabel}>
-          — {shareContext?.writingTitle}
+          — {shareSession?.writingTitle}
         </Text>
-        {shareContext?.sectionTitle ? (
+        {shareSession?.sectionTitle ? (
           <Text style={styles.shareSelectionSection}>
-            {shareContext.sectionTitle}
+            {shareSession.sectionTitle}
           </Text>
         ) : null}
       </View>

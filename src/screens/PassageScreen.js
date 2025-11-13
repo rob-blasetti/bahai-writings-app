@@ -9,6 +9,9 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import Passage from '../components/Passage';
+
+const EDGE_SWIPE_DISTANCE = 32;
 
 export default function PassageScreen({
   styles,
@@ -23,14 +26,20 @@ export default function PassageScreen({
   onOpenProgram,
   hasProgramPassages,
   programBadgeLabel,
+  onContinueSection,
 }) {
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onMoveShouldSetPanResponder: (_, gestureState) => {
+        onStartShouldSetPanResponder: evt =>
+          evt?.nativeEvent?.pageX <= EDGE_SWIPE_DISTANCE,
+        onMoveShouldSetPanResponder: (evt, gestureState) => {
+          if ((evt?.nativeEvent?.pageX ?? 0) > EDGE_SWIPE_DISTANCE) {
+            return false;
+          }
           const { dx, dy } = gestureState;
           const isHorizontalSwipe =
-            Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10;
+            Math.abs(dx) > Math.abs(dy) && dx > 10;
           return isHorizontalSwipe;
         },
         onPanResponderRelease: (_, gestureState) => {
@@ -66,27 +75,29 @@ export default function PassageScreen({
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Daily Passage
       </Text>
-      <View style={styles.passageMeta}>
-        <Text style={styles.passageMetaLabel}>From</Text>
-        <Text
-          style={[
-            styles.passageMetaWriting,
-            scaledTypography.passageMetaWriting,
-          ]}
-        >
-          {randomPassage.writingTitle}
-        </Text>
-        <Text
-          style={[
-            styles.passageMetaSection,
-            scaledTypography.passageMetaSection,
-          ]}
-        >
-          {randomPassage.sectionTitle}
-        </Text>
-      </View>
       <ScrollView contentContainerStyle={styles.contentScroll}>
-        <View style={styles.passageCard}>
+        <View style={styles.passageMeta}>
+          <Text style={styles.passageMetaLabel}>From</Text>
+          <Text
+            style={[
+              styles.passageMetaWriting,
+              scaledTypography.passageMetaWriting,
+            ]}
+          >
+            {randomPassage.writingTitle}
+          </Text>
+          {randomPassage.sectionTitle ? (
+            <Text
+              style={[
+                styles.passageMetaSection,
+                scaledTypography.passageMetaSection,
+              ]}
+            >
+              {randomPassage.sectionTitle}
+            </Text>
+          ) : null}
+        </View>
+        <Passage>
           <View style={styles.blockWrapper}>
             {renderBlockContent(randomPassage.block, 0, {
               writingTitle: randomPassage.writingTitle,
@@ -143,7 +154,17 @@ export default function PassageScreen({
               </TouchableOpacity>
             </View>
           </View>
-        </View>
+        </Passage>
+        {typeof onContinueSection === 'function' ? (
+          <TouchableOpacity
+            onPress={onContinueSection}
+            style={styles.passageContinueButton}
+          >
+            <Text style={styles.passageContinueButtonLabel}>
+              Continue this section
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </ScrollView>
       <TouchableOpacity onPress={onShowAnother} style={styles.secondaryButton}>
         <Text style={styles.secondaryButtonLabel}>Show another passage</Text>

@@ -1,4 +1,4 @@
-import { API_URL } from '../config';
+import { API_URL } from '../../config';
 
 const DEFAULT_AUTH_ENDPOINT =
   'https://liquidspirit.example.com/api/kali/login-ls';

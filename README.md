@@ -39,7 +39,12 @@ Any time you add, remove, or modify a writing, rerun the script so the manifest 
 
 ## Project Structure
 
-- `App.jsx` – main application entry point and navigation.
+- `src/app/` – top-level `App.js` and `AppContent.js` plus navigation wiring.
+- `src/screens/` – all user-facing screens (Start, SignIn, Library, etc.).
+- `src/components/` – shared UI pieces like navigation bars and modals.
+- `src/auth`, `src/programs`, `src/sharing`, `src/myVerses`, `src/reflection` – domain contexts, services, and utilities.
+- `src/writings/` – helpers for parsing, searching, and formatting writings.
+- `src/styles/` – shared color palettes, typography, and component style sheets.
 - `assets/writings/` – raw XHTML source files to ingest.
 - `assets/generated/writings.json` – auto-generated library used at runtime.
 - `scripts/` – helper utilities, including the writings processing script.

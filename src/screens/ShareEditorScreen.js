@@ -19,7 +19,10 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { launchCamera } from 'react-native-image-picker';
 import ViewShot from 'react-native-view-shot';
 import Video from 'react-native-video';
-import { extractPassageSentences, getShareableBlockText } from './shareUtils';
+import {
+  extractPassageSentences,
+  getShareableBlockText,
+} from '../sharing/shareUtils';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 
 const getThemeChipStyle = (theme, isActive) => ({
@@ -30,7 +33,7 @@ const getThemeChipStyle = (theme, isActive) => ({
 export default function ShareEditorScreen({
   styles,
   scaledTypography,
-  shareContext,
+  shareSession,
   shareBackButtonLabel,
   selectedSentenceIndexes,
   onClose,
@@ -42,18 +45,18 @@ export default function ShareEditorScreen({
 }) {
   const viewShotRef = useRef(null);
   const passageText = useMemo(() => {
-    if (typeof shareContext?.passageText === 'string') {
-      return shareContext.passageText;
+    if (typeof shareSession?.passageText === 'string') {
+      return shareSession.passageText;
     }
-    return getShareableBlockText(shareContext?.block);
-  }, [shareContext?.passageText, shareContext?.block]);
+    return getShareableBlockText(shareSession?.block);
+  }, [shareSession?.passageText, shareSession?.block]);
 
   const sentences = useMemo(() => {
-    if (Array.isArray(shareContext?.sentences)) {
-      return shareContext.sentences;
+    if (Array.isArray(shareSession?.sentences)) {
+      return shareSession.sentences;
     }
     return extractPassageSentences(passageText);
-  }, [shareContext?.sentences, passageText]);
+  }, [shareSession?.sentences, passageText]);
   const sanitizedSelection = useMemo(() => {
     if (!Array.isArray(selectedSentenceIndexes) || sentences.length === 0) {
       return [];
@@ -258,7 +261,7 @@ export default function ShareEditorScreen({
     setLayoutId(layoutOptions[1]?.id ?? layoutOptions[0].id);
     setActiveTool('theme');
     setCapturedMedia(null);
-  }, [shareContext?.block?.id, fontOptions, layoutOptions]);
+  }, [shareSession?.block?.id, fontOptions, layoutOptions]);
 
   useEffect(() => {
     setTextColorId('theme');
@@ -312,15 +315,15 @@ export default function ShareEditorScreen({
   }, [sanitizedSelection, sentences, passageText]);
   const shareAuthorLabel = useMemo(() => {
     const rawAttribution =
-      typeof shareContext?.block?.attribution === 'string'
-        ? shareContext.block.attribution.trim()
+      typeof shareSession?.block?.attribution === 'string'
+        ? shareSession.block.attribution.trim()
         : '';
     if (rawAttribution.length > 0) {
       const stripped = rawAttribution.replace(/^[—–-]+\s*/, '').trim();
       return stripped.length > 0 ? stripped : rawAttribution;
     }
-    return shareContext?.writingTitle ?? 'Bahai Writings';
-  }, [shareContext?.block?.attribution, shareContext?.writingTitle]);
+    return shareSession?.writingTitle ?? 'Bahai Writings';
+  }, [shareSession?.block?.attribution, shareSession?.writingTitle]);
 
   const baseParagraphStyle = scaledTypography?.contentParagraph ?? {};
   const calculatedQuoteSize = baseParagraphStyle.fontSize
@@ -417,8 +420,8 @@ export default function ShareEditorScreen({
 
       onShareNow?.({
         destination: destinationId,
-        writingTitle: shareContext?.writingTitle,
-        sectionTitle: shareContext?.sectionTitle,
+        writingTitle: shareSession?.writingTitle,
+        sectionTitle: shareSession?.sectionTitle,
         text: shareText,
         composedImageUri,
         media:
@@ -449,7 +452,7 @@ export default function ShareEditorScreen({
       fontId,
       layoutId,
       onShareNow,
-      shareContext,
+      shareSession,
       shareText,
       shareThemeId,
       viewShotOptions,
@@ -755,9 +758,9 @@ export default function ShareEditorScreen({
           { color: activeTextColor },
         ]}
       >
-        — {shareContext?.writingTitle}
+        — {shareSession?.writingTitle}
       </Text>
-      {shareContext?.sectionTitle ? (
+      {shareSession?.sectionTitle ? (
         <Text
           style={[
             styles.sharePreviewSection,
@@ -765,7 +768,7 @@ export default function ShareEditorScreen({
             { color: activeTextColor },
           ]}
         >
-          {shareContext.sectionTitle}
+          {shareSession.sectionTitle}
         </Text>
       ) : null}
     </View>

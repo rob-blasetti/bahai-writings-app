@@ -1,41 +1,47 @@
 import React, { useCallback } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
+import Passage from '../components/Passage';
 
 function VerseCard({ styles, item, index, renderBlockContent, onRemoveVerse }) {
   const savedAtLabel =
     typeof item.savedAt === 'number' && Number.isFinite(item.savedAt)
       ? new Date(item.savedAt).toLocaleDateString()
       : null;
+  const removeButton =
+    typeof onRemoveVerse === 'function' ? (
+      <TouchableOpacity
+        onPress={() => onRemoveVerse(item.id)}
+        style={styles.programRemoveButton}
+      >
+        <Text style={styles.programRemoveLabel}>Remove</Text>
+      </TouchableOpacity>
+    ) : null;
 
   return (
-    <View style={styles.passageCard}>
-      <View style={styles.programCardHeader}>
-        <View style={styles.programCardMeta}>
-          <Text style={styles.programCardTitle}>
-            {index + 1}. {item.writingTitle ?? 'Saved passage'}
+    <View style={styles.passageGroup}>
+      <View style={styles.passageMetaHeader}>
+        <View style={styles.passageMetaInfo}>
+          <Text style={styles.passageMetaLabel}>Saved passage {index + 1}</Text>
+          <Text style={styles.passageMetaWriting}>
+            {item.writingTitle ?? 'Saved passage'}
           </Text>
           {item.sectionTitle ? (
-            <Text style={styles.programCardSubtitle}>{item.sectionTitle}</Text>
+            <Text style={styles.passageMetaSection}>{item.sectionTitle}</Text>
           ) : null}
           {savedAtLabel ? (
             <Text style={styles.myVerseSavedAt}>Saved {savedAtLabel}</Text>
           ) : null}
         </View>
-        {typeof onRemoveVerse === 'function' ? (
-          <TouchableOpacity
-            onPress={() => onRemoveVerse(item.id)}
-            style={styles.programRemoveButton}
-          >
-            <Text style={styles.programRemoveLabel}>Remove</Text>
-          </TouchableOpacity>
-        ) : null}
+        {removeButton}
       </View>
-      <View style={styles.blockWrapper}>
-        {renderBlockContent(item.block, 0, {
-          writingTitle: item.writingTitle,
-          sectionTitle: item.sectionTitle,
-        })}
-      </View>
+      <Passage>
+        <View style={styles.blockWrapper}>
+          {renderBlockContent(item.block, 0, {
+            writingTitle: item.writingTitle,
+            sectionTitle: item.sectionTitle,
+          })}
+        </View>
+      </Passage>
     </View>
   );
 }

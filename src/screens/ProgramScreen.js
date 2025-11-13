@@ -14,6 +14,7 @@ import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import Passage from '../components/Passage';
 
 const PROGRAM_STEPS = [
   { id: 'program', label: 'Program' },
@@ -231,14 +232,15 @@ function ProgramThemeModal({
 
 function ProgramPassageCard({ styles, item, index, renderBlockContent, onRemove }) {
   return (
-    <View style={styles.passageCard}>
-      <View style={styles.programCardHeader}>
-        <View style={styles.programCardMeta}>
-          <Text style={styles.programCardTitle}>
-            {index + 1}. {item.writingTitle ?? 'Selected passage'}
+    <View style={styles.passageGroup}>
+      <View style={styles.passageMetaHeader}>
+        <View style={styles.passageMetaInfo}>
+          <Text style={styles.passageMetaLabel}>Passage {index + 1}</Text>
+          <Text style={styles.passageMetaWriting}>
+            {item.writingTitle ?? 'Selected passage'}
           </Text>
           {item.sectionTitle ? (
-            <Text style={styles.programCardSubtitle}>{item.sectionTitle}</Text>
+            <Text style={styles.passageMetaSection}>{item.sectionTitle}</Text>
           ) : null}
         </View>
         <TouchableOpacity
@@ -248,12 +250,14 @@ function ProgramPassageCard({ styles, item, index, renderBlockContent, onRemove 
           <Text style={styles.programRemoveLabel}>Remove</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.blockWrapper}>
-        {renderBlockContent(item.block, 0, {
-          writingTitle: item.writingTitle,
-          sectionTitle: item.sectionTitle,
-        })}
-      </View>
+      <Passage>
+        <View style={styles.blockWrapper}>
+          {renderBlockContent(item.block, 0, {
+            writingTitle: item.writingTitle,
+            sectionTitle: item.sectionTitle,
+          })}
+        </View>
+      </Passage>
     </View>
   );
 }
