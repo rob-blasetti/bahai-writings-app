@@ -106,3 +106,24 @@ export function SettingsIconButton({
     </TouchableOpacity>
   );
 }
+
+export function CollectionsIconButton({
+  styles,
+  style,
+  onPress,
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.homeActionButton, style]}
+      accessibilityRole="button"
+      accessibilityLabel="Choose a collection"
+      accessibilityHint="View the available writings collections."
+    >
+      <View style={styles.iconButton}>
+        <Ionicons name="albums-outline" size={22} color="#3b2a15" />
+      </View>
+      <Text style={styles.homeActionLabel}>Collections</Text>
+    </TouchableOpacity>
+  );
+}

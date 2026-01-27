@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import BaseScreen from '../components/BaseScreen';
 
 export default function SettingsScreen({
   styles,
@@ -16,7 +17,7 @@ export default function SettingsScreen({
   onLogout,
 }) {
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <NavigationTopBar
         styles={styles}
         onBack={onClose}
@@ -76,6 +77,6 @@ export default function SettingsScreen({
           <Text style={styles.authSecondaryButtonLabel}>Log Out</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </BaseScreen>
   );
 }

@@ -3,10 +3,7 @@ import { StatusBar, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppContent from './AppContent';
 import { AuthProvider } from '../auth/authContext';
-import { VersesProvider } from '../myVerses/versesContext';
-import { ShareProvider } from '../sharing/shareContext';
-import { ProgramProvider } from '../programs/programContext';
-import { ReflectionProvider } from '../reflection/reflectionContext';
+import { AppProvider } from './appContext';
 
 export default function App() {
   const isDarkMode = useColorScheme() === 'dark';
@@ -15,15 +12,9 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
       <AuthProvider>
-        <VersesProvider>
-          <ShareProvider>
-            <ProgramProvider>
-              <ReflectionProvider>
-                <AppContent />
-              </ReflectionProvider>
-            </ProgramProvider>
-          </ShareProvider>
-        </VersesProvider>
+        <AppProvider>
+          <AppContent />
+        </AppProvider>
       </AuthProvider>
     </SafeAreaProvider>
   );

@@ -22,9 +22,21 @@ export function BottomNavigationBar({
   iconSize = 22,
 }) {
   const bottomInset = Math.max(safeAreaInsets?.bottom ?? 0, 8);
+  const leftInset = safeAreaInsets?.left ?? 0;
+  const rightInset = safeAreaInsets?.right ?? 0;
 
   return (
-    <View style={[styles.container, style, { paddingBottom: bottomInset }]}>
+    <View
+      style={[
+        styles.container,
+        style,
+        {
+          paddingBottom: bottomInset,
+          paddingLeft: 16 + leftInset,
+          paddingRight: 16 + rightInset,
+        },
+      ]}
+    >
       {TABS.map((tab) => {
         const isActive = tab.key === activeTab;
         const tintColor = isActive ? '#3b2a15' : '#a28a6c';
@@ -78,4 +90,3 @@ const styles = StyleSheet.create({
     color: '#3b2a15',
   },
 });
-

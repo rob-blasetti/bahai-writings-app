@@ -17,10 +17,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigationContainerRef } from '@react-navigation/native';
-import { CardStyleInterpolators } from '@react-navigation/stack';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import writingsManifest from '../../assets/generated/writings.json';
 import StartScreen from '../screens/StartScreen';
 import SignInScreen from '../screens/SignInScreen';
+import WritingsCollectionScreen from '../screens/WritingsCollectionScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import ShareSelectionScreen from '../screens/ShareSelectionScreen';
@@ -35,29 +36,28 @@ import ProfileScreen from '../screens/ProfileScreen';
 import MyVersesScreen from '../screens/MyVersesScreen';
 import { BottomNavigationBar } from '../components/BottomNavigationBar';
 import ReflectionModal from '../components/ReflectionModal';
-import {
-  AppNavigationContainer,
-  BOTTOM_TAB_SET,
-  Stack,
-} from '../navigation';
+import BaseScreen from '../components/BaseScreen';
+import { AppNavigationContainer, BOTTOM_TAB_SET } from '../navigation';
 import { useAuth } from '../auth/authContext';
-import { useProgram } from '../programs/programContext';
 import { PROGRAM_FREQUENCY_OPTIONS } from '../programs/programUtils';
-import { useShare } from '../sharing/shareContext';
-import { useReflection } from '../reflection/reflectionContext';
-import { useVerses } from '../myVerses/versesContext';
+import { useApp } from './appContext';
 import {
   buildSearchableSections,
   searchSectionsByTheme as findSectionsByTheme,
 } from '../writings/searchEngine';
 import { cleanBlockText, extractPassageSentences } from '../writings/passageUtils';
 import { getSectionsForWriting } from '../writings/writingParser';
+import {
+  WRITING_COLLECTIONS,
+  inferCollectionKey,
+} from '../writings/collectionUtils';
 import { getShareableBlockText } from '../sharing/shareUtils';
 import { appStyles } from '../styles/components';
 
 const styles = appStyles;
 const SHARE_SELECTION_LIMIT = 2;
 const SEARCH_HIGHLIGHT_DURATION_MS = 2500;
+const Stack = createNativeStackNavigator();
 const sectionPagerRef = { current: null };
 const pendingSectionBlockIndexRef = { current: null };
 const searchHighlightTimeoutRef = { current: null };
@@ -71,17 +71,21 @@ function AppContent() {
     () => (writingsManifest?.items ?? []).filter(item => item.text?.length),
     [],
   );
-  const enrichedWritings = useMemo(
+  const writingsWithCollections = useMemo(
     () =>
       writings.map(writing => ({
         ...writing,
-        sectionsData: getSectionsForWriting(writing),
+        collectionKey: inferCollectionKey(writing),
       })),
     [writings],
   );
-  const searchableSections = useMemo(
-    () => buildSearchableSections(enrichedWritings),
-    [enrichedWritings],
+  const enrichedWritings = useMemo(
+    () =>
+      writingsWithCollections.map(writing => ({
+        ...writing,
+        sectionsData: getSectionsForWriting(writing),
+      })),
+    [writingsWithCollections],
   );
 
   const {
@@ -137,8 +141,6 @@ function AppContent() {
     submitProgram,
     setProgramSubmissionError,
     setProgramSubmissionSuccess,
-  } = useProgram();
-  const {
     shareThemes,
     shareThemeId,
     setShareThemeId,
@@ -146,22 +148,22 @@ function AppContent() {
     setShareSession,
     selectedSentenceIndexes,
     setSelectedSentenceIndexes,
-  } = useShare();
-  const {
     reflectionModalContext,
     reflectionInput,
     setReflectionInput,
     showReflection,
     closeReflection,
     submitReflection,
-  } = useReflection();
-  const { verses: myVerses, addVerseFromBlock, removeVerse } = useVerses();
+    verses: myVerses,
+    addVerseFromBlock,
+    removeVerse,
+  } = useApp();
   const navigationRef = useNavigationContainerRef();
   const [isNavigationReady, setIsNavigationReady] = useState(false);
   const pendingNavigationRef = useRef(null);
-  const suppressBackAnimationRef = useRef(false);
   const [currentScreen, setCurrentScreen] = useState('start');
   const [activeBottomTab, setActiveBottomTab] = useState('home');
+  const [activeCollectionKey, setActiveCollectionKey] = useState(null);
   const [selectedWritingId, setSelectedWritingId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
   const [randomPassage, setRandomPassage] = useState(null);
@@ -241,6 +243,46 @@ function AppContent() {
     }),
     [fontScale],
   );
+  const collectionCounts = useMemo(() => {
+    const counts = WRITING_COLLECTIONS.reduce((acc, collection) => {
+      acc[collection.key] = 0;
+      return acc;
+    }, {});
+    enrichedWritings.forEach(writing => {
+      const key = writing.collectionKey;
+      if (key && Object.prototype.hasOwnProperty.call(counts, key)) {
+        counts[key] += 1;
+      }
+    });
+    return counts;
+  }, [enrichedWritings]);
+  const collectionOptions = useMemo(
+    () =>
+      WRITING_COLLECTIONS.map(collection => ({
+        ...collection,
+        count: collectionCounts[collection.key] ?? 0,
+      })),
+    [collectionCounts],
+  );
+  const activeCollection = useMemo(
+    () =>
+      WRITING_COLLECTIONS.find(
+        collection => collection.key === activeCollectionKey,
+      ) ?? null,
+    [activeCollectionKey],
+  );
+  const scopedWritings = useMemo(() => {
+    if (!activeCollectionKey) {
+      return enrichedWritings;
+    }
+    return enrichedWritings.filter(
+      writing => writing.collectionKey === activeCollectionKey,
+    );
+  }, [activeCollectionKey, enrichedWritings]);
+  const searchableSections = useMemo(
+    () => buildSearchableSections(scopedWritings),
+    [scopedWritings],
+  );
   const windowWidth = Dimensions.get('window').width;
   const horizontalInsets =
     (safeAreaInsets.left ?? 0) + (safeAreaInsets.right ?? 0);
@@ -288,7 +330,7 @@ function AppContent() {
     if (initialRoute?.name) {
       setCurrentScreen(initialRoute.name);
     }
-  }, [navigationRef, suppressBackAnimationRef]);
+  }, [navigationRef]);
   const handleNavigationStateChange = useCallback(() => {
     const nextRouteName = navigationRef.getCurrentRoute()?.name;
     if (nextRouteName) {
@@ -296,7 +338,6 @@ function AppContent() {
         previous === nextRouteName ? previous : nextRouteName,
       );
     }
-    suppressBackAnimationRef.current = false;
   }, [navigationRef]);
   useEffect(() => {
     return () => {
@@ -322,13 +363,13 @@ function AppContent() {
   }, [shareSession]);
   const selectedWriting = useMemo(
     () =>
-      enrichedWritings.find(item => item.id === selectedWritingId) ?? null,
-    [selectedWritingId, enrichedWritings],
+      scopedWritings.find(item => item.id === selectedWritingId) ?? null,
+    [selectedWritingId, scopedWritings],
   );
   const writingSections = selectedWriting?.sectionsData ?? [];
   const availablePassages = useMemo(
     () =>
-      enrichedWritings.flatMap(writing =>
+      scopedWritings.flatMap(writing =>
         writing.sectionsData.flatMap(section =>
           section.blocks.map((block, blockIndex) => ({
             writingId: writing.id,
@@ -340,7 +381,7 @@ function AppContent() {
           })),
         ),
       ),
-    [enrichedWritings],
+    [scopedWritings],
   );
   const programCount = programPassages.length;
   const hasProgramPassages = programCount > 0;
@@ -629,13 +670,16 @@ function AppContent() {
 
   const handleBottomTabPress = useCallback(
     tabKey => {
-      if (!BOTTOM_TAB_SET.has(tabKey) || tabKey === currentScreen) {
+      if (!BOTTOM_TAB_SET.has(tabKey)) {
         return;
       }
-      suppressBackAnimationRef.current = true;
-      navigateToScreen(tabKey);
+      const targetScreen = tabKey === 'home' ? 'collections' : tabKey;
+      if (targetScreen === currentScreen) {
+        return;
+      }
+      navigateToScreen(targetScreen);
     },
-    [currentScreen, navigateToScreen, suppressBackAnimationRef],
+    [currentScreen, navigateToScreen],
   );
 
   const handleCloseReflectionModal = useCallback(() => {
@@ -650,6 +694,19 @@ function AppContent() {
     await continueAsGuest();
     setAuthPassword('');
     setAuthError(null);
+    navigateToScreen('collections');
+  };
+
+  const handleOpenCollections = () => {
+    navigateToScreen('collections');
+  };
+
+  const handleSelectCollection = collectionKey => {
+    setActiveCollectionKey(collectionKey);
+    setSelectedWritingId(null);
+    setSelectedSectionId(null);
+    setRandomPassage(null);
+    setProgramReturnScreen(null);
     navigateToScreen('home');
   };
 
@@ -677,7 +734,7 @@ function AppContent() {
     const result = await signIn();
     if (result.success) {
       const display = result.user?.name ?? 'Friend';
-      navigateToScreen('home');
+      navigateToScreen('collections');
       Alert.alert(
         'Signed in',
         display ? `Welcome, ${display}!` : 'You are signed in.',
@@ -989,6 +1046,10 @@ function AppContent() {
 
   const handleLogout = useCallback(async () => {
     await logout();
+    setActiveCollectionKey(null);
+    setSelectedWritingId(null);
+    setSelectedSectionId(null);
+    setRandomPassage(null);
     navigateToScreen('start');
   }, [logout, navigateToScreen]);
 
@@ -1018,14 +1079,15 @@ function AppContent() {
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
   const isReflectionModalVisible = Boolean(reflectionModalContext);
   useEffect(() => {
+    if (currentScreen === 'collections') {
+      setActiveBottomTab('home');
+      return;
+    }
     if (BOTTOM_TAB_SET.has(currentScreen)) {
       setActiveBottomTab(currentScreen);
     }
   }, [currentScreen]);
   const showBottomNav = currentScreen !== 'start';
-  const containerBottomPadding = showBottomNav
-    ? 0
-    : safeAreaInsets.bottom;
 
   const renderBlockContent = (block, index, options = {}) => {
     if (!block) {
@@ -1277,58 +1339,42 @@ function AppContent() {
 
   const displayName = authenticatedUser?.name ?? 'Kali';
 
-  const stackScreenOptions = useMemo(
-    () => ({
-      headerShown: false,
-      gestureEnabled: true,
-      fullScreenGestureEnabled: true,
-      gestureDirection: 'horizontal',
-      cardStyleInterpolator: props => {
-        if (props.closing && !suppressBackAnimationRef.current) {
-          return CardStyleInterpolators.forHorizontalIOS(props);
-        }
+  const stackScreenOptions = useCallback(
+    ({ route }) => {
+      const isBottomTabScreen = BOTTOM_TAB_SET.has(route.name);
+      if (isBottomTabScreen) {
         return {
-          cardStyle: {
-            transform: [{ translateX: 0 }],
-          },
+          headerShown: false,
+          gestureEnabled: false,
+          fullScreenGestureEnabled: false,
+          animation: 'none',
         };
-      },
-    }),
-    [suppressBackAnimationRef],
+      }
+      return {
+        headerShown: false,
+        gestureEnabled: true,
+        fullScreenGestureEnabled: true,
+        animation: 'slide_from_right',
+      };
+    },
+    [],
   );
 
   if (!hasHydratedAuth) {
     return (
-      <View
-        style={[
-          styles.container,
-          {
-            paddingTop: safeAreaInsets.top,
-            paddingBottom: safeAreaInsets.bottom,
-            paddingLeft: safeAreaInsets.left,
-            paddingRight: safeAreaInsets.right,
-            alignItems: 'center',
-            justifyContent: 'center',
-          },
-        ]}
+      <BaseScreen
+        styles={styles}
+        variant="plain"
+        includeBottomInset
+        style={{ alignItems: 'center', justifyContent: 'center' }}
       >
         <ActivityIndicator color="#8c6239" />
-      </View>
+      </BaseScreen>
     );
   }
 
   const renderScreenSurface = child => (
-    <View
-      style={[
-        styles.container,
-        {
-          paddingTop: safeAreaInsets.top,
-          paddingBottom: containerBottomPadding,
-          paddingLeft: safeAreaInsets.left,
-          paddingRight: safeAreaInsets.right,
-        },
-      ]}
-    >
+    <View style={styles.container}>
       <View style={styles.screenContentWrapper}>{child}</View>
       {showBottomNav ? (
         <BottomNavigationBar
@@ -1388,12 +1434,25 @@ function AppContent() {
             )
           }
         </Stack.Screen>
+        <Stack.Screen name="collections">
+          {() =>
+            renderScreenSurface(
+              <WritingsCollectionScreen
+                styles={styles}
+                collections={collectionOptions}
+                onSelectCollection={handleSelectCollection}
+              />,
+            )
+          }
+        </Stack.Screen>
         <Stack.Screen name="home">
           {() =>
             renderScreenSurface(
               <LibraryScreen
                 styles={styles}
-                writings={enrichedWritings}
+                writings={scopedWritings}
+                collectionLabel={activeCollection?.label ?? null}
+                onOpenCollections={handleOpenCollections}
                 onSelectWriting={handleSelectWriting}
                 onOpenSettings={handleOpenSettings}
                 onOpenProgram={handleOpenProgram}

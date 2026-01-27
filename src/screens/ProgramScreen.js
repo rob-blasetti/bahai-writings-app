@@ -15,6 +15,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 import Passage from '../components/Passage';
+import BaseScreen from '../components/BaseScreen';
 
 const PROGRAM_STEPS = [
   { id: 'program', label: 'Program' },
@@ -977,7 +978,7 @@ export default function ProgramScreen({
     : null;
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <ProgramThemeModal
         styles={styles}
         visible={isThemeModalVisible}
@@ -1056,6 +1057,6 @@ export default function ProgramScreen({
           programSubmissionSuccess={programSubmissionSuccess}
         />
       </ScrollView>
-    </View>
+    </BaseScreen>
   );
 }

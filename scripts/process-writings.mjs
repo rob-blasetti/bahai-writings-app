@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, readdir, writeFile, mkdir } from 'fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { load } from 'cheerio';
@@ -11,571 +11,676 @@ const __dirname = path.dirname(__filename);
 const writingsDirectory = path.resolve(__dirname, '../assets/writings');
 const outputDirectory = path.resolve(__dirname, '../assets/generated');
 const outputFile = path.join(outputDirectory, 'writings.json');
-const SECTION_ORDER = [
-  'Preface',
-  'Rashḥ-i-‘Amá (The Clouds of the Realms Above)',
-  'The Seven Valleys',
-  'From the Letter Bá’ to the Letter Há’',
-  'Three Other Tablets',
-  'The Four Valleys',
-  'Notes',
-];
 
-function filenameToTitle(filename) {
-  const baseName = filename.replace(/\.xhtml$/i, '');
-  return baseName
-    .replace(/[-_]+/g, ' ')
-    .replace(/\b\w/g, char => char.toUpperCase())
+const INLINE_UNWRAP_TAGS = new Set([
+  'span',
+  'u',
+  'cite',
+  'abbr',
+  'em',
+  'strong',
+  'b',
+  'i',
+  'small',
+  'sup',
+  'sub',
+  'font',
+]);
+const BLOCK_TAGS = new Set([
+  'p',
+  'h1',
+  'h2',
+  'h3',
+  'h4',
+  'h5',
+  'h6',
+  'li',
+  'div',
+  'blockquote',
+]);
+const HEADING_TAGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
+const TOC_SELECTOR = 'nav';
+const EXCLUDE_SECTION_PATTERN = /^(notes?|endnotes?|index|glossary|bibliography|key to)/i;
+const SECTION_LABEL_PATTERN = /^(preface|foreword|introduction|prologue|epilogue|appendix|synopsis|questions and answers|part|book|chapter|section|tablet|prayer|valley|poem|supplementary)/i;
+const ROMAN_HEADING_PATTERN = /^[\u2013\u2014\-\s]*[IVXLCDM]+[\u2013\u2014\-\s]*$/i;
+const DASH_STRIP_PATTERN = /^[\u2013\u2014\-\s]+|[\u2013\u2014\-\s]+$/g;
+
+function normalizeWhitespace(text) {
+  if (!text) {
+    return '';
+  }
+
+  return text
+    .replace(/\u00a0/g, ' ')
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
 
-function normalizeWhitespace(text) {
-  const lines = text
-    .replace(/\r\n/g, '\n')
-    .split('\n')
-    .map(line => line.trim());
-
-  const normalized = [];
-
-  for (const line of lines) {
-    if (line.length === 0) {
-      if (normalized.length === 0 || normalized[normalized.length - 1] === '') {
-        continue;
-      }
-      normalized.push('');
-    } else {
-      normalized.push(line);
-    }
-  }
-
-  return normalized.join('\n').trim();
-}
-
-async function ensureOutputDirectory() {
-  await mkdir(outputDirectory, { recursive: true });
-}
-
-async function collectXhtmlFiles() {
-  const entries = await readdir(writingsDirectory, { withFileTypes: true });
-  return entries
-    .filter(entry => entry.isFile() && entry.name.toLowerCase().endsWith('.xhtml'))
-    .map(entry => entry.name)
-    .sort((a, b) => a.localeCompare(b));
-}
-
 function slugify(value) {
+  if (!value) {
+    return '';
+  }
   return value
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/(^-|-$)/g, '');
 }
 
-function normalizeTitle(text) {
-  return text.replace(/\s+/g, ' ').trim();
+function normalizeHeadingText(text) {
+  const normalized = normalizeWhitespace(text);
+  if (!normalized) {
+    return '';
+  }
+  return normalized.replace(DASH_STRIP_PATTERN, '').trim();
 }
 
-function normalizeShareParts(parts) {
-  return parts
-    .map(part => normalizeWhitespace(part))
-    .filter(part => part.length > 0);
+function isRomanHeading(text) {
+  return ROMAN_HEADING_PATTERN.test(normalizeHeadingText(text));
 }
 
-function detectBlockType($node) {
-  if (!$node || $node.length === 0) {
-    return 'paragraph';
+function isLikelyStandaloneHeading(text) {
+  const normalized = normalizeHeadingText(text);
+  if (!normalized) {
+    return false;
   }
-
-  if ($node.is('blockquote')) {
-    return 'quote';
+  if (normalized.length > 80) {
+    return false;
   }
-
-  if ($node.is('h4') || $node.is('h5') || $node.is('h6')) {
-    return 'heading';
+  if (/^[\d.]+$/.test(normalized)) {
+    return false;
   }
-
-  if ($node.is('ul') || $node.is('ol')) {
-    return 'list';
+  if (/[.!?]$/.test(normalized)) {
+    return false;
   }
-
-  if ($node.is('p') && $node.find('span.ce').length > 1) {
-    return 'poetry';
+  if (isRomanHeading(normalized)) {
+    return true;
   }
-
-  return 'paragraph';
+  return SECTION_LABEL_PATTERN.test(normalized);
 }
 
-function findSourceId($node) {
-  if (!$node || $node.length === 0) {
-    return null;
-  }
+function extractMetadata($, fileName) {
+  const baseName = path.basename(fileName);
+  const documentId = normalizeWhitespace(
+    $('meta[name="document-id"]').attr('content'),
+  );
+  const author = normalizeWhitespace($('meta[name="author"]').attr('content'));
+  const keywords = normalizeWhitespace($('meta[name="keywords"]').attr('content'));
+  const description = normalizeWhitespace(
+    $('meta[name="description"]').attr('content'),
+  );
+  const lastModified = normalizeWhitespace(
+    $('meta[name="last-modified"]').attr('content'),
+  );
 
-  if ($node.attr('id')) {
-    return $node.attr('id');
-  }
+  const titleTag = normalizeWhitespace($('title').first().text());
+  const h1Title = normalizeWhitespace($('h1').first().text());
+  const fallbackTitle = baseName
+    .replace(/\.xhtml$/i, '')
+    .replace(/[-_]+/g, ' ')
+    .replace(/\b\w/g, char => char.toUpperCase());
 
-  const descendantWithId = $node.find('[id]').filter((_, el) => {
-    const value = el.attribs?.id;
-    return typeof value === 'string' && value.length > 0;
-  });
+  const id = documentId || baseName.replace(/\.xhtml$/i, '');
+  const title = titleTag || h1Title || fallbackTitle;
 
-  if (descendantWithId.length > 0) {
-    return descendantWithId.first().attr('id');
-  }
-
-  return null;
+  return {
+    id,
+    title,
+    author: author.length > 0 ? author : null,
+    keywords: keywords.length > 0 ? keywords : null,
+    description: description.length > 0 ? description : null,
+    lastModified: lastModified.length > 0 ? lastModified : null,
+  };
 }
 
-function buildFootnoteMap($) {
-  const map = new Map();
+function extractTocEntries($) {
+  const entries = [];
+  const excludedIds = new Set();
+  const seen = new Set();
 
-  $('li').each((_, li) => {
-    const container = $(li);
-    const numberAnchor = container.find('a.td').first();
-    const contentAnchor = container.find('a.sf[id]').first();
-    const backLink = container.find('a.jc[href^="#"]').first();
-
-    if (!numberAnchor.length || !contentAnchor.length || !backLink.length) {
-      return;
-    }
-
-    const id = contentAnchor.attr('id');
-    if (!id) {
-      return;
-    }
-
-    let textSource = contentAnchor.parent('p');
-    if (!textSource || !textSource.length) {
-      textSource = container;
-    }
-
-    const text = normalizeWhitespace(textSource.text() ?? '');
-    if (!text) {
-      return;
-    }
-
-    const number = normalizeWhitespace(numberAnchor.text() ?? '') || null;
-
-    map.set(id, {
-      id,
-      number,
-      text,
-      targetId: backLink.attr('href')?.replace(/^#/, '') ?? null,
-    });
-  });
-
-  return map;
-}
-
-function collectSectionContent(anchor, nextAnchor, sectionId, $, footnoteMap) {
-  const wrap = node => $(node);
-  const blocks = [];
-  let fallbackCounter = 0;
-
-  const collectFootnoteRefs = $node => {
-    if (
-      !$node ||
-      !$node.length ||
-      !footnoteMap ||
-      typeof footnoteMap.size !== 'number' ||
-      footnoteMap.size === 0
-    ) {
-      return [];
-    }
-
-    const refs = [];
-    const seen = new Set();
-    $node.find('sup a[href^=\"#\"]').each((_, anchor) => {
-      const href = anchor.attribs?.href ?? '';
-      if (typeof href !== 'string' || href.length === 0) {
+  $(TOC_SELECTOR)
+    .find('a[href^="#"]')
+    .each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const id = href.startsWith('#') ? href.slice(1).trim() : '';
+      const label = normalizeWhitespace($(el).text());
+      if (!id || !label) {
         return;
       }
-      const id = href.replace(/^#/, '');
-      if (!id || seen.has(id)) {
+      if (EXCLUDE_SECTION_PATTERN.test(label)) {
+        excludedIds.add(id);
         return;
       }
-      const entry = footnoteMap.get(id);
-      if (!entry) {
+      if (seen.has(id)) {
         return;
       }
       seen.add(id);
-      refs.push(entry);
+      entries.push({ id, label });
     });
 
-    return refs;
-  };
+  return { entries, excludedIds: Array.from(excludedIds) };
+}
 
-  const pushBlock = ($node, rawText, type, sourceId) => {
-    const text = normalizeWhitespace(rawText ?? '');
-    if (!text) {
-      return;
-    }
-    fallbackCounter += 1;
-    blocks.push({
-      id: sourceId ?? `${sectionId}-block-${fallbackCounter}`,
-      type,
-      text,
-      sourceId: sourceId ?? null,
-      sourceClass:
-        ($node && typeof $node.attr === 'function'
-          ? ($node.attr('class') ?? '').trim()
-          : '') || null,
-      sourceTag:
-        ($node && $node[0] && typeof $node[0].name === 'string'
-          ? $node[0].name
-          : null) || null,
-      footnoteRefs: collectFootnoteRefs($node),
-    });
-  };
+function prepareDocument($) {
+  const body = $('body');
 
-  const processNode = $node => {
-    if (!$node || $node.length === 0) {
-      return;
-    }
+  body.find('script, style, link, svg, noscript').remove();
+  body.find('div.wf').remove();
+  body.find(TOC_SELECTOR).remove();
 
-    const { type } = $node[0];
-    if (type === 'text') {
-      const text = normalizeWhitespace($node.text());
-      if (text) {
-        pushBlock(null, text, 'paragraph', null);
-      }
-      return;
-    }
+  body.find('a.jc').remove();
 
-    if (type !== 'tag') {
-      return;
-    }
-
-    const blockType = detectBlockType($node);
-
-    if ($node.is('p') || $node.is('h4') || $node.is('h5') || $node.is('h6')) {
-      pushBlock($node, $node.text(), blockType, findSourceId($node));
-      return;
-    }
-
-    if ($node.is('blockquote')) {
-      $node.find('p').each((_, p) => {
-        const paragraph = wrap(p);
-        pushBlock(
-          paragraph,
-          paragraph.text(),
-          'quote',
-          findSourceId(paragraph),
-        );
-      });
-      return;
-    }
-
-    if ($node.is('ul') || $node.is('ol')) {
-      const prefix = $node.is('ol') ? '•' : '•';
-      const lines = [];
-      $node.children('li').each((_, li) => {
-        const text = normalizeWhitespace(wrap(li).text());
-        if (text) {
-          lines.push(`${prefix} ${text}`);
-        }
-      });
-      if (lines.length > 0) {
-        pushBlock($node, lines.join('\n'), 'list', findSourceId($node));
-      }
-      return;
-    }
-
-    if ($node.is('div') || $node.is('section') || $node.is('article')) {
-      $node.contents().each((_, child) => {
-        processNode(wrap(child));
-      });
-      return;
-    }
-
-    // Fallback: process children if they exist, otherwise treat as text.
-    const children = $node.contents();
-    if (children.length > 0) {
-      children.each((_, child) => {
-        processNode(wrap(child));
-      });
+  body.find('a.td').each((_, el) => {
+    const text = normalizeWhitespace($(el).text());
+    if (/^[0-9]+$/.test(text)) {
+      $(el).replaceWith(` [${text}]`);
     } else {
-      pushBlock($node, $node.text(), blockType, findSourceId($node));
+      $(el).replaceWith('');
     }
-  };
-
-  const headingNames = new Set(['h1', 'h2', 'h3']);
-  anchor.contents().each((_, childNode) => {
-    if (childNode.type === 'tag' && headingNames.has(childNode.name)) {
-      return;
-    }
-    processNode(wrap(childNode));
   });
 
-  let sibling = anchor.next();
-  while (sibling && sibling.length) {
-    if (nextAnchor && nextAnchor.length && sibling[0] === nextAnchor[0]) {
-      break;
-    }
-    processNode(sibling);
-    sibling = sibling.next();
+  body.find('sup.ye, sup.af').each((_, el) => {
+    const number = normalizeWhitespace($(el).text());
+    $(el).replaceWith(number ? ` [${number}]` : '');
+  });
+
+  INLINE_UNWRAP_TAGS.forEach(tag => {
+    body.find(tag).each((_, el) => {
+      $(el).replaceWith($(el).contents());
+    });
+  });
+
+  // Keep anchor tags with IDs so TOC anchors can be matched later.
+
+  body.find('br').each((_, el) => {
+    $(el).replaceWith('\n');
+  });
+
+  body.find('hr.fc').each((_, el) => {
+    $(el).replaceWith('<p data-separator="true">\n\n</p>');
+  });
+
+  body.find('table').each((_, el) => {
+    const text = flattenTable($, el);
+    $(el).replaceWith(`<p>${text}</p>`);
+  });
+}
+
+function collectInlineText($, element) {
+  let output = '';
+
+  $(element)
+    .contents()
+    .each((_, node) => {
+      if (node.type === 'text') {
+        output += node.data;
+        return;
+      }
+
+      if (node.type !== 'tag') {
+        return;
+      }
+
+      const name = node.name?.toLowerCase();
+      if (name === 'br') {
+        output += '\n';
+        return;
+      }
+      if (name === 'hr' && $(node).hasClass('fc')) {
+        output += '\n\n';
+        return;
+      }
+
+      output += collectInlineText($, node);
+    });
+
+  return output;
+}
+
+function flattenTable($, element) {
+  const rows = [];
+
+  $(element)
+    .find('tr')
+    .each((_, row) => {
+      const cells = [];
+      $(row)
+        .children('th,td')
+        .each((_, cell) => {
+          const text = normalizeWhitespace(collectInlineText($, cell));
+          if (text.length > 0) {
+            cells.push(text);
+          }
+        });
+      if (cells.length > 0) {
+        rows.push(cells.join(' – '));
+      }
+    });
+
+  return rows.join('\n');
+}
+
+function collectAnchorIds($, element) {
+  const ids = new Set();
+  const ownId = $(element).attr('id');
+  if (ownId) {
+    ids.add(ownId);
   }
+
+  $(element)
+    .find('a[id]')
+    .each((_, anchor) => {
+      const id = $(anchor).attr('id');
+      if (id) {
+        ids.add(id);
+      }
+    });
+
+  return ids.size > 0 ? Array.from(ids) : null;
+}
+
+function collectBlocks($, root) {
+  const blocks = [];
+  let counter = 0;
+
+  const walk = node => {
+    if (!node || !node.type) {
+      return;
+    }
+
+    if (node.type === 'text') {
+      return;
+    }
+
+    if (node.type !== 'tag') {
+      return;
+    }
+
+    const name = node.name?.toLowerCase() ?? '';
+    const $el = $(node);
+    const isSeparator = Boolean($el.attr('data-separator'));
+    const hasNestedBlocks =
+      $el.children('p,h1,h2,h3,h4,h5,h6,li,div,table,blockquote').length > 0 &&
+      name !== 'table';
+
+    if (
+      isSeparator ||
+      name === 'table' ||
+      (BLOCK_TAGS.has(name) && !hasNestedBlocks)
+    ) {
+      const rawText = normalizeWhitespace(collectInlineText($, node));
+      const sourceId = $el.attr('id') || null;
+      const sourceClass = $el.attr('class') || '';
+      const anchorIds = collectAnchorIds($, $el);
+
+      if (rawText.length === 0 && !isSeparator) {
+        return;
+      }
+
+      counter += 1;
+      const headingLevel = HEADING_TAGS.has(name)
+        ? Number.parseInt(name.replace('h', ''), 10)
+        : null;
+      const type = isSeparator
+        ? 'separator'
+        : HEADING_TAGS.has(name)
+        ? 'heading'
+        : 'paragraph';
+
+      blocks.push({
+        id: sourceId || `block-${counter}`,
+        type,
+        text: rawText,
+        sourceId,
+        sourceTag: name,
+        sourceClass,
+        level: headingLevel,
+        anchorIds,
+      });
+      return;
+    }
+
+    $el.contents().each((_, child) => walk(child));
+  };
+
+  $(root)
+    .contents()
+    .each((_, child) => walk(child));
 
   return blocks;
 }
 
-function isSeparatorText(text) {
-  const normalized = normalizeWhitespace(text).replace(/\s+/g, ' ');
-  return normalized === '* * *';
+function formatNumberedParagraphs(blocks) {
+  return blocks.map(block => {
+    if (block.type !== 'paragraph') {
+      return block;
+    }
+
+    const match = block.text.match(/^(\d+)[\s.]+(.*)$/);
+    if (!match || !match[2]) {
+      return block;
+    }
+
+    return {
+      ...block,
+      text: `${match[1]}. ${match[2].trim()}`,
+    };
+  });
 }
 
-function isStandaloneNumber(text) {
-  return /^[IVXLCDM0-9]+$/.test(text.trim());
-}
+function combineNumberedParagraphs(blocks) {
+  const combined = [];
 
-function isAttributionText(text) {
-  const trimmed = text.trim();
-  return /^[-–—]\s*/.test(trimmed) || /^--\s*/.test(trimmed);
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const numberMatch = block.text && /^\d+\.$/.test(block.text);
+
+    if (numberMatch) {
+      const number = block.text.replace(/\D/g, '');
+      const next = blocks[index + 1];
+      const nextText = next ? next.text : '';
+      const stripped = normalizeWhitespace(nextText.replace(/^\d+\s*/, ''));
+      const text = normalizeWhitespace(`${number}. ${stripped}`);
+      const mergedAnchorIds = new Set([
+        ...(block.anchorIds || []),
+        ...(next?.anchorIds || []),
+      ]);
+      combined.push({
+        ...next,
+        id: next?.id || block.id,
+        type: 'paragraph',
+        text,
+        anchorIds: mergedAnchorIds.size > 0 ? Array.from(mergedAnchorIds) : null,
+      });
+      index += 1;
+      continue;
+    }
+
+    combined.push(block);
+  }
+
+  return combined.filter(block => block.text && block.text.length > 0);
 }
 
 function postProcessBlocks(blocks) {
-  const processed = [];
-
-  const ensureShareParts = block => {
-    if (!Array.isArray(block.shareParts)) {
-      block.shareParts = [];
+  const normalized = blocks.map(block => {
+    if (block.type === 'heading') {
+      return {
+        ...block,
+        text: normalizeHeadingText(block.text),
+      };
     }
-    if (block.shareParts.length === 0 && block.text?.length) {
-      block.shareParts.push(block.text);
+
+    if (block.type === 'paragraph' && isLikelyStandaloneHeading(block.text)) {
+      return {
+        ...block,
+        type: 'heading',
+        level: 2,
+        text: normalizeHeadingText(block.text),
+      };
+    }
+
+    return block;
+  });
+
+  const withoutTitle = normalized.filter(
+    block => !(block.type === 'heading' && block.level === 1),
+  );
+
+  return combineNumberedParagraphs(formatNumberedParagraphs(withoutTitle));
+}
+
+function buildSectionsFromToc(
+  blocks,
+  tocEntries,
+  excludedIds,
+  writingId,
+  fallbackTitle,
+) {
+  if (!Array.isArray(tocEntries) || tocEntries.length === 0) {
+    return null;
+  }
+
+  const tocMap = new Map(tocEntries.map(entry => [entry.id, entry]));
+  const tocIds = new Set(tocEntries.map(entry => entry.id));
+  const excludedSet = new Set(excludedIds || []);
+  const sections = [];
+  let current = null;
+  let sectionIndex = 0;
+  const prefaceBlocks = [];
+
+  const flush = () => {
+    if (current && current.blocks.length > 0) {
+      sections.push(current);
     }
   };
 
   for (const block of blocks) {
-    const text = typeof block.text === 'string' ? block.text.trim() : '';
-    const hasFootnoteRefs = Array.isArray(block.footnoteRefs) && block.footnoteRefs.length > 0;
+    const anchorMatch = block.anchorIds
+      ? block.anchorIds.find(id => tocIds.has(id))
+      : null;
+    const excludedMatch = block.anchorIds
+      ? block.anchorIds.find(id => excludedSet.has(id))
+      : null;
 
-    if (!text && !hasFootnoteRefs) {
-      continue;
+    if (excludedMatch) {
+      flush();
+      break;
     }
 
-    if (text && isSeparatorText(text)) {
-      continue;
-    }
-
-    if (text && isStandaloneNumber(text)) {
-      continue;
-    }
-
-    if (text && isAttributionText(text)) {
-      const target = processed[processed.length - 1];
-      if (target) {
-        ensureShareParts(target);
-        target.attribution = target.attribution
-          ? `${target.attribution}
-${text}`
-          : text;
-        target.shareParts.push(text);
-      } else {
-        processed.push({
-          ...block,
-          text: '',
-          attribution: text,
-          shareParts: [text],
+    if (anchorMatch) {
+      const entry = tocMap.get(anchorMatch);
+      if (!current && prefaceBlocks.length > 0) {
+        sections.push({
+          id: `${writingId}-front-matter`,
+          title: 'Front Matter',
+          blocks: prefaceBlocks,
         });
       }
+      flush();
+      sectionIndex += 1;
+      const baseTitle = entry?.label || `Section ${sectionIndex}`;
+      const title = normalizeHeadingText(baseTitle) || baseTitle;
+      const slug = slugify(title) || `section-${sectionIndex}`;
+      current = {
+        id: `${writingId}-${slug}`,
+        title,
+        blocks: [],
+      };
+      const headingText = normalizeHeadingText(block.text).toLowerCase();
+      if (block.type !== 'heading' || headingText !== title.toLowerCase()) {
+        current.blocks.push(block);
+      }
       continue;
     }
 
-    const nextBlock = {
-      ...block,
-      text,
-    };
-
-    ensureShareParts(nextBlock);
-
-    if (hasFootnoteRefs) {
-      const formattedFootnotes = block.footnoteRefs
-        .map(ref => {
-          const value = typeof ref?.text === 'string' ? normalizeWhitespace(ref.text) : '';
-          if (!value) {
-            return null;
-          }
-          const number = typeof ref?.number === 'string' && ref.number.trim().length > 0
-            ? ref.number.trim()
-            : null;
-          return number ? `${number}. ${value}` : value;
-        })
-        .filter(Boolean);
-
-      if (formattedFootnotes.length > 0) {
-        nextBlock.footnotes = formattedFootnotes;
-        nextBlock.shareParts.push(...formattedFootnotes);
-      }
+    if (!current) {
+      prefaceBlocks.push(block);
+    } else {
+      current.blocks.push(block);
     }
-
-    processed.push(nextBlock);
   }
 
-  return processed.map(block => {
-    const shareParts = normalizeShareParts(block.shareParts ?? []);
-    const cleanFootnotes = Array.isArray(block.footnotes)
-      ? normalizeShareParts(block.footnotes)
-      : [];
-    const cleanAttribution =
-      typeof block.attribution === 'string'
-        ? normalizeWhitespace(block.attribution)
-        : null;
-    const cleanText =
-      typeof block.text === 'string' ? normalizeWhitespace(block.text) : '';
+  flush();
 
-    const shareTextParts = shareParts.length
-      ? shareParts
-      : [cleanText, cleanAttribution, ...cleanFootnotes];
-    const shareText = normalizeWhitespace(
-      shareTextParts.filter(Boolean).join('\n\n'),
-    );
-
-    const result = {
-      ...block,
-      text: cleanText,
-      shareText: shareText.length > 0 ? shareText : cleanText,
-    };
-
-    if (cleanFootnotes.length > 0) {
-      result.footnotes = cleanFootnotes;
-    } else {
-      delete result.footnotes;
-    }
-
-    if (cleanAttribution && cleanAttribution.length > 0) {
-      result.attribution = cleanAttribution;
-    } else {
-      delete result.attribution;
-    }
-
-    delete result.shareParts;
-    delete result.sourceClass;
-    delete result.sourceTag;
-    delete result.footnoteRefs;
-
-    return result;
-  });
+  return sections.length > 0
+    ? sections
+    : [
+        {
+          id: `${writingId}-full`,
+          title: fallbackTitle || 'Full Text',
+          blocks,
+        },
+      ];
 }
 
-function extractSectionsFromDocument($) {
-  const sections = [];
-  const footnoteMap = buildFootnoteMap($);
-  const anchors = $('body div.ic').filter((_, element) => $(element).find('h2').length > 0);
-  const isFooterBlock = text => {
-    const normalized = normalizeWhitespace(text ?? '');
-    if (!normalized) {
-      return false;
-    }
-    if (/^This document has been downloaded from the Bah[áa][’']?[ií] Reference Library/i.test(normalized)) {
-      return true;
-    }
-    if (/^Last modified:/i.test(normalized)) {
-      return true;
-    }
-    return false;
-  };
+function buildSectionsFromHeadings(blocks, writingId, fallbackTitle) {
+  const headingBlocks = blocks.filter(
+    block => block.type === 'heading' && Number.isFinite(block.level) && block.level >= 2,
+  );
 
-  if (anchors.length === 0) {
-    const fallbackAnchor = $('body > div.b').first();
-    const targetNode = fallbackAnchor.length > 0 ? fallbackAnchor : $('body');
-    const fallbackSectionId = 'full-text';
-    const fallbackBlocks = postProcessBlocks(
-      collectSectionContent(targetNode, null, fallbackSectionId, $, footnoteMap),
-    ).filter(block => !isFooterBlock(block.text));
-
-    if (fallbackBlocks.length > 0) {
-      sections.push({
-        id: fallbackSectionId,
-        title: 'Full Text',
-        blocks: fallbackBlocks,
-        paragraphs: fallbackBlocks.map(block =>
-          normalizeWhitespace(block.shareText ?? block.text ?? ''),
-        ),
-      });
-    }
-
-    return sections;
+  if (headingBlocks.length === 0) {
+    return [
+      {
+        id: `${writingId}-full`,
+        title: fallbackTitle || 'Full Text',
+        blocks,
+      },
+    ];
   }
 
-  anchors.each((index, element) => {
-    const anchor = $(element);
-    const h2 = anchor.find('h2').first();
-    const baseTitle = normalizeTitle(h2.text());
-    let combinedTitle = baseTitle;
-    const possibleSubtitles = anchor.find('h3').toArray();
-    for (const element of possibleSubtitles) {
-      const subtitleText = normalizeTitle($(element).text());
-      if (/^\(.*\)$/.test(subtitleText)) {
-        combinedTitle = `${baseTitle} ${subtitleText}`;
+  const sectionLevel = Math.min(...headingBlocks.map(block => block.level));
+  const sections = [];
+  let current = null;
+  let sectionIndex = 0;
+  const prefaceBlocks = [];
+
+  const flush = () => {
+    if (current && current.blocks.length > 0) {
+      sections.push(current);
+    }
+  };
+
+  for (const block of blocks) {
+    if (block.type === 'heading' && block.level === sectionLevel) {
+      const title = normalizeHeadingText(block.text);
+      if (EXCLUDE_SECTION_PATTERN.test(title)) {
+        flush();
         break;
       }
+      if (!current && prefaceBlocks.length > 0) {
+        sections.push({
+          id: `${writingId}-front-matter`,
+          title: 'Front Matter',
+          blocks: prefaceBlocks,
+        });
+      }
+      flush();
+      sectionIndex += 1;
+      const finalTitle = title || `Section ${sectionIndex}`;
+      const slug = slugify(finalTitle) || `section-${sectionIndex}`;
+      current = {
+        id: `${writingId}-${slug}`,
+        title: finalTitle,
+        blocks: [],
+      };
+      continue;
     }
 
-    const slugId = slugify(combinedTitle || baseTitle || `section-${index + 1}`);
-    const nextAnchor = anchors.eq(index + 1);
-    const blocks = postProcessBlocks(
-      collectSectionContent(anchor, nextAnchor, slugId, $, footnoteMap),
-    );
-
-    sections.push({
-      id: slugId,
-      title: combinedTitle || baseTitle || `Section ${sections.length + 1}`,
-      blocks,
-      paragraphs: blocks.map(block =>
-        normalizeWhitespace(block.shareText ?? block.text ?? ''),
-      ),
-    });
-  });
-
-  return sections;
-}
-
-async function extractTextFromXhtml(filePath) {
-  const markup = await readFile(filePath, 'utf8');
-  const $ = load(markup, { xmlMode: true, decodeEntities: true });
-  const body = $('body');
-  if (body.length === 0) {
-    const rawText = $.root().text();
-    return {
-      text: normalizeWhitespace(rawText),
-      sections: [],
-    };
+    if (!current) {
+      prefaceBlocks.push(block);
+    } else {
+      current.blocks.push(block);
+    }
   }
 
-  const allText = normalizeWhitespace(body.text());
-  const extractedSections = extractSectionsFromDocument($);
+  flush();
 
-  const orderedSections = SECTION_ORDER.map(desiredTitle => {
-    const matchIndex = extractedSections.findIndex(
-      section => normalizeTitle(section.title) === normalizeTitle(desiredTitle),
-    );
-    if (matchIndex === -1) {
-      return null;
-    }
-    return extractedSections.splice(matchIndex, 1)[0];
-  }).filter(Boolean);
+  return sections.length > 0
+    ? sections
+    : [
+        {
+          id: `${writingId}-full`,
+          title: fallbackTitle || 'Full Text',
+          blocks,
+        },
+      ];
+}
 
-  const remainingSections = extractedSections;
+function buildSections({
+  blocks,
+  tocEntries,
+  excludedIds,
+  writingId,
+  fallbackTitle,
+}) {
+  const fromToc = buildSectionsFromToc(
+    blocks,
+    tocEntries,
+    excludedIds,
+    writingId,
+    fallbackTitle,
+  );
+  if (fromToc) {
+    return fromToc;
+  }
+  return buildSectionsFromHeadings(blocks, writingId, fallbackTitle);
+}
+
+function stripInternalFields(block) {
+  const { anchorIds, level, ...rest } = block;
+  return rest;
+}
+
+async function readWritingFile(fileName) {
+  const fullPath = path.join(writingsDirectory, fileName);
+  const markup = await readFile(fullPath, 'utf8');
+  const $ = load(markup, { decodeEntities: true });
+
+  const metadata = extractMetadata($, fileName);
+  const { entries: tocEntries, excludedIds } = extractTocEntries($);
+
+  prepareDocument($);
+
+  const rawBlocks = collectBlocks($, $('body'));
+  const blocks = postProcessBlocks(rawBlocks);
+  const normalizedText = normalizeWhitespace(blocks.map(block => block.text).join('\n\n'));
+  const writingId = slugify(metadata.id) || slugify(fileName.replace(/\.xhtml$/i, ''));
+  const sections = buildSections({
+    blocks,
+    tocEntries,
+    excludedIds,
+    writingId,
+    fallbackTitle: metadata.title,
+  }).map(section => ({
+    ...section,
+    blocks: section.blocks.map(stripInternalFields),
+  }));
 
   return {
-    text: allText,
-    sections: [...orderedSections, ...remainingSections],
+    id: metadata.id,
+    title: metadata.title,
+    fileName,
+    author: metadata.author,
+    keywords: metadata.keywords,
+    text: normalizedText,
+    sections,
   };
 }
 
-async function buildManifest(xhtmlFiles) {
+async function ensureOutputDirectory() {
+  await mkdir(outputDirectory, { recursive: true });
+}
+
+async function collectXhtmlFiles(dir = writingsDirectory) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await collectXhtmlFiles(fullPath);
+      files.push(...nested);
+      continue;
+    }
+    if (entry.isFile() && entry.name.toLowerCase().endsWith('.xhtml')) {
+      files.push(path.relative(writingsDirectory, fullPath));
+    }
+  }
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+async function buildManifest() {
   const items = [];
+  const xhtmlFiles = await collectXhtmlFiles();
 
   for (const fileName of xhtmlFiles) {
-    const fullPath = path.join(writingsDirectory, fileName);
     try {
-      const { text, sections } = await extractTextFromXhtml(fullPath);
-      items.push({
-        id: fileName.replace(/\.xhtml$/i, ''),
-        title: filenameToTitle(fileName),
-        fileName,
-        text,
-        sections,
-      });
+      const writing = await readWritingFile(fileName);
+      items.push(writing);
       console.log(`Processed ${fileName}`);
     } catch (error) {
       console.error(`Failed to process ${fileName}:`, error.message);
@@ -590,15 +695,14 @@ async function buildManifest(xhtmlFiles) {
 
 async function main() {
   await ensureOutputDirectory();
-  const xhtmlFiles = await collectXhtmlFiles();
-
-  if (xhtmlFiles.length === 0) {
-    console.warn('No XHTML files found in assets/writings.');
-  }
-
-  const manifest = await buildManifest(xhtmlFiles);
+  const manifest = await buildManifest();
   await writeFile(outputFile, JSON.stringify(manifest, null, 2));
-  console.log(`Wrote ${manifest.items.length} item(s) to ${path.relative(process.cwd(), outputFile)}`);
+  console.log(
+    `Wrote ${manifest.items.length} item(s) to ${path.relative(
+      process.cwd(),
+      outputFile,
+    )}`,
+  );
 }
 
 main().catch(error => {

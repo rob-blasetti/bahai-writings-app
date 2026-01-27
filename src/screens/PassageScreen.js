@@ -10,6 +10,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 import Passage from '../components/Passage';
+import BaseScreen from '../components/BaseScreen';
 
 const EDGE_SWIPE_DISTANCE = 32;
 
@@ -58,7 +59,7 @@ export default function PassageScreen({
   }
 
   return (
-    <View style={styles.screenSurface} {...panResponder.panHandlers}>
+    <BaseScreen styles={styles} {...panResponder.panHandlers}>
       <NavigationTopBar
         styles={styles}
         onBack={onBack}
@@ -169,6 +170,6 @@ export default function PassageScreen({
       <TouchableOpacity onPress={onShowAnother} style={styles.secondaryButton}>
         <Text style={styles.secondaryButtonLabel}>Show another passage</Text>
       </TouchableOpacity>
-    </View>
+    </BaseScreen>
   );
 }

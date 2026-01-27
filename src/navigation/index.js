@@ -1,5 +1,6 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
+import Stack from './StackNavigator';
 
 export function AppNavigationContainer({
   children,
@@ -18,5 +19,5 @@ export function AppNavigationContainer({
   );
 }
 
-export { default as Stack } from './StackNavigator';
+export { Stack };
 export { BOTTOM_TAB_KEYS, BOTTOM_TAB_SET, isBottomTabRoute } from './BottomTabs';

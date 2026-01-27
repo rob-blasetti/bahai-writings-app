@@ -1,14 +1,18 @@
 import React, { useCallback } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import {
+  CollectionsIconButton,
   ProgramIconButton,
   RandomIconButton,
   SettingsIconButton,
 } from '../components/IconButtons';
+import BaseScreen from '../components/BaseScreen';
 
 export default function LibraryScreen({
   styles,
   writings,
+  collectionLabel,
+  onOpenCollections,
   onSelectWriting,
   onOpenSettings,
   onOpenProgram,
@@ -40,13 +44,22 @@ export default function LibraryScreen({
   );
 
   return (
-    <View style={styles.homeContainer}>
+    <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
       <View style={styles.homeHeader}>
         <View style={styles.homeHeaderTopRow}>
-          <Text style={styles.sectionTitle}>Baha'i Writings</Text>
+          <Text style={styles.sectionTitle}>
+            {collectionLabel ?? "Baha'i Writings"}
+          </Text>
           <SettingsIconButton styles={styles} onPress={onOpenSettings} />
         </View>
         <View style={styles.homeHeaderActions}>
+          {onOpenCollections ? (
+            <CollectionsIconButton
+              styles={styles}
+              style={styles.homeActionButtonSpacing}
+              onPress={onOpenCollections}
+            />
+          ) : null}
           <ProgramIconButton
             styles={styles}
             showLabel
@@ -72,6 +85,6 @@ export default function LibraryScreen({
         renderItem={renderWritingItem}
         ListEmptyComponent={listEmptyComponent}
       />
-    </View>
+    </BaseScreen>
   );
 }

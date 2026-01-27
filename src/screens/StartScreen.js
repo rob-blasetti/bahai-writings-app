@@ -1,5 +1,6 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import BaseScreen from '../components/BaseScreen';
 
 export default function StartScreen({
   styles,
@@ -8,7 +9,12 @@ export default function StartScreen({
   onContinueAsGuest,
 }) {
   return (
-    <View style={styles.authContainer}>
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      includeBottomInset
+      style={styles.authContainer}
+    >
       <View style={styles.authIntro}>
         <Text style={styles.authGreeting}>Welcome</Text>
         <Text style={styles.authName}>{displayName}</Text>
@@ -34,6 +40,6 @@ export default function StartScreen({
           </Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </BaseScreen>
   );
 }

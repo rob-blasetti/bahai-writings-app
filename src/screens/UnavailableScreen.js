@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import BaseScreen from '../components/BaseScreen';
 
 export default function UnavailableScreen({
   styles,
@@ -11,7 +12,7 @@ export default function UnavailableScreen({
   programBadgeLabel,
 }) {
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <NavigationTopBar
         styles={styles}
         onBack={onBack}
@@ -30,6 +31,6 @@ export default function UnavailableScreen({
           The selected content is not available.
         </Text>
       </View>
-    </View>
+    </BaseScreen>
   );
 }

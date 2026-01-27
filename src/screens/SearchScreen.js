@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import BaseScreen from '../components/BaseScreen';
 
 const MAX_RESULTS = 50;
 const MAX_RECENT_QUERIES = 6;
@@ -135,7 +136,7 @@ export default function SearchScreen({
   const hasResults = results.length > 0;
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <TextInput
         value={query}
         onChangeText={setQuery}
@@ -190,6 +191,6 @@ export default function SearchScreen({
           </View>
         </View>
       )}
-    </View>
+    </BaseScreen>
   );
 }

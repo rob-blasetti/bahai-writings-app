@@ -4,6 +4,7 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
 import Passage from '../components/Passage';
+import BaseScreen from '../components/BaseScreen';
 
 const EDGE_SWIPE_DISTANCE = 32;
 
@@ -270,8 +271,9 @@ export default function SectionScreen({
   }
 
   return (
-    <View
-      style={[styles.screenSurface, styles.sectionScreenSurface]}
+    <BaseScreen
+      styles={styles}
+      variant="section"
       {...panResponder.panHandlers}
     >
       <View style={styles.sectionHeader}>
@@ -340,6 +342,6 @@ export default function SectionScreen({
           </View>
         </>
       )}
-    </View>
+    </BaseScreen>
   );
 }

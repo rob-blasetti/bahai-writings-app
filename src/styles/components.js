@@ -3,7 +3,6 @@ import { StyleSheet } from 'react-native';
 export const appStyles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f7f4ef',
   },
   screenContentWrapper: {
     flex: 1,
@@ -155,6 +154,12 @@ export const appStyles = StyleSheet.create({
   homeHeader: {
     marginBottom: 20,
   },
+  homeHeaderSubtitle: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginTop: 6,
+    lineHeight: 20,
+  },
   homeHeaderTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -286,7 +291,6 @@ export const appStyles = StyleSheet.create({
   screenSurface: {
     flex: 1,
     borderRadius: 16,
-    backgroundColor: '#ffffff',
     padding: 20,
   },
   sectionScreenSurface: {

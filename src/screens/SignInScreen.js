@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import BaseScreen from '../components/BaseScreen';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 export default function SignInScreen({
@@ -23,7 +24,7 @@ export default function SignInScreen({
   const [isPasswordVisible, setPasswordVisible] = useState(false);
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <NavigationTopBar
         styles={styles}
         onBack={onCancel}
@@ -90,6 +91,6 @@ export default function SignInScreen({
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </BaseScreen>
   );
 }

@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import BaseScreen from '../components/BaseScreen';
 
 export default function WritingScreen({
   styles,
@@ -48,7 +49,7 @@ export default function WritingScreen({
   }
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <NavigationTopBar
         styles={styles}
         onBack={onBack}
@@ -76,6 +77,6 @@ export default function WritingScreen({
         renderItem={renderSectionItem}
         ListEmptyComponent={listEmptyComponent}
       />
-    </View>
+    </BaseScreen>
   );
 }

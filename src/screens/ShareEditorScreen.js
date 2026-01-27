@@ -24,6 +24,7 @@ import {
   getShareableBlockText,
 } from '../sharing/shareUtils';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import BaseScreen from '../components/BaseScreen';
 
 const getThemeChipStyle = (theme, isActive) => ({
   borderColor: theme.accentColor,
@@ -794,7 +795,7 @@ export default function ShareEditorScreen({
   );
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <NavigationTopBar
         styles={styles}
         onBack={onClose}
@@ -977,6 +978,6 @@ export default function ShareEditorScreen({
           </View>
         </View>
       </Modal>
-    </View>
+    </BaseScreen>
   );
 }

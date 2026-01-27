@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import Passage from '../components/Passage';
+import BaseScreen from '../components/BaseScreen';
 
 function VerseCard({ styles, item, index, renderBlockContent, onRemoveVerse }) {
   const savedAtLabel =
@@ -70,18 +71,18 @@ export default function MyVersesScreen({
 
   if (!hasVerses) {
     return (
-      <View style={styles.bottomNavScreen}>
+      <BaseScreen styles={styles} variant="plain" style={styles.bottomNavScreen}>
         <Text style={styles.bottomNavScreenTitle}>My Verses</Text>
         <Text style={styles.bottomNavScreenSubtitle}>
           Save passages from sections or the daily passage and they will appear
           here.
         </Text>
-      </View>
+      </BaseScreen>
     );
   }
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         My Verses
       </Text>
@@ -95,6 +96,6 @@ export default function MyVersesScreen({
         contentContainerStyle={styles.myVersesListContent}
         renderItem={renderVerseCard}
       />
-    </View>
+    </BaseScreen>
   );
 }

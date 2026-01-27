@@ -2,23 +2,183 @@ import React, {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
   useState,
 } from 'react';
 import { Share as NativeShare } from 'react-native';
 import { useAuth } from '../auth/authContext';
+import { shareThemes } from '../sharing/themePresets';
+import { createPassageSnapshot, cleanBlockText } from '../writings/passageUtils';
+import { loadVersesFromStorage, persistVersesToStorage } from '../myVerses/versesStorage';
 import {
   PROGRAM_FREQUENCY_OPTIONS,
   WEEKDAY_LABELS,
   formatProgramFrequencyLabel,
-} from './programUtils';
-import { createDevotionalActivity, resolveDevotionalEndpoint } from './programService';
-import { cleanBlockText, createPassageSnapshot } from '../writings/passageUtils';
+} from '../programs/programUtils';
+import { createDevotionalActivity, resolveDevotionalEndpoint } from '../programs/programService';
 
-const ProgramContext = createContext(null);
+const AppContext = createContext(null);
 
-export function ProgramProvider({ children }) {
+function createVerseId() {
+  const timestamp = Date.now();
+  return `verse-${timestamp}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+export function AppProvider({ children }) {
   const { user } = useAuth();
+
+  const [shareThemeId, setShareThemeId] = useState(shareThemes[0]?.id ?? 'warmGlow');
+  const [shareSession, setShareSession] = useState(null);
+  const [selectedSentenceIndexes, setSelectedSentenceIndexes] = useState([]);
+
+  const [reflectionModalContext, setReflectionModalContext] = useState(null);
+  const [reflectionInput, setReflectionInput] = useState('');
+
+  const showReflection = useCallback(({
+    block,
+    writingTitle,
+    sectionTitle,
+  }) => {
+    if (!block) {
+      return;
+    }
+    const blockText = typeof block.text === 'string' ? block.text.trim() : '';
+    if (blockText.length === 0) {
+      return;
+    }
+    setReflectionModalContext({
+      blockId: block.sourceId ?? block.id ?? null,
+      blockText,
+      writingTitle: writingTitle ?? null,
+      sectionTitle: sectionTitle ?? null,
+    });
+    setReflectionInput('');
+  }, []);
+
+  const closeReflection = useCallback(() => {
+    setReflectionModalContext(null);
+    setReflectionInput('');
+  }, []);
+
+  const submitReflection = useCallback(() => {
+    if (!reflectionModalContext) {
+      return;
+    }
+    const trimmed = reflectionInput.trim();
+    if (trimmed.length === 0) {
+      return;
+    }
+    console.log('[Reflection] submitted', {
+      blockId: reflectionModalContext.blockId,
+      writingTitle: reflectionModalContext.writingTitle,
+      sectionTitle: reflectionModalContext.sectionTitle,
+      textLength: trimmed.length,
+    });
+    closeReflection();
+  }, [closeReflection, reflectionInput, reflectionModalContext]);
+
+  const [verses, setVerses] = useState([]);
+  const hasHydratedRef = useRef(false);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const hydrate = async () => {
+      const stored = await loadVersesFromStorage();
+      if (!isMounted) {
+        return;
+      }
+      if (stored.length > 0) {
+        setVerses(prev => {
+          if (prev.length === 0) {
+            return stored.sort((a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0));
+          }
+          const existingKeys = new Set(
+            prev.map(
+              item =>
+                `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+                  item.sectionId ?? ''
+                }`,
+            ),
+          );
+          const itemsToAdd = stored.filter(item => {
+            const key = `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+              item.sectionId ?? ''
+            }`;
+            if (existingKeys.has(key)) {
+              return false;
+            }
+            existingKeys.add(key);
+            return true;
+          });
+          return [...itemsToAdd, ...prev].sort(
+            (a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0),
+          );
+        });
+      }
+      hasHydratedRef.current = true;
+    };
+
+    hydrate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hasHydratedRef.current) {
+      return;
+    }
+    persistVersesToStorage(verses);
+  }, [verses]);
+
+  const addVerseFromBlock = useCallback(payload => {
+    const snapshot = createPassageSnapshot(payload);
+    if (!snapshot) {
+      return 0;
+    }
+
+    const savedAt = Date.now();
+    const verseItem = {
+      ...snapshot,
+      id: createVerseId(),
+      savedAt,
+    };
+
+    let additions = 0;
+    setVerses(previous => {
+      const existing = Array.isArray(previous) ? previous : [];
+      const existingKeys = new Set(
+        existing.map(
+          item =>
+            `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+              item.sectionId ?? ''
+            }`,
+        ),
+      );
+
+      const key = `${verseItem.block.id}::${verseItem.writingId ?? ''}::${
+        verseItem.sectionId ?? ''
+      }`;
+      if (existingKeys.has(key)) {
+        return existing;
+      }
+      additions = 1;
+      return [verseItem, ...existing].sort(
+        (a, b) => (b.savedAt ?? 0) - (a.savedAt ?? 0),
+      );
+    });
+
+    return additions;
+  }, []);
+
+  const removeVerse = useCallback(verseId => {
+    setVerses(previous => previous.filter(item => item.id !== verseId));
+  }, []);
+
   const defaultProgramTimeZone = useMemo(() => {
     try {
       return Intl.DateTimeFormat().resolvedOptions().timeZone ?? 'UTC';
@@ -176,7 +336,7 @@ export function ProgramProvider({ children }) {
     setProgramFacilitators('');
     setIncludeCurrentUserAsFacilitator(true);
     setProgramFieldErrors({});
-  }, [defaultProgramTimeZone, setProgramFieldError]);
+  }, [defaultProgramTimeZone]);
 
   const clearProgram = useCallback(() => {
     setProgramPassages([]);
@@ -379,56 +539,110 @@ export function ProgramProvider({ children }) {
     user?.userId,
   ]);
 
-  const value = {
-    programPassages,
-    programTitle,
-    setProgramTitle,
-    programNotes,
-    setProgramNotes,
-    programSessionDate,
-    setProgramSessionDate,
-    programSessionTime,
-    setProgramSessionTime,
-    programTimeZone,
-    setProgramTimeZone,
-    defaultProgramTimeZone,
-    programFrequency,
-    setProgramFrequency,
-    programParticipants,
-    setProgramParticipants,
-    programFacilitators,
-    setProgramFacilitators,
-    includeCurrentUserAsFacilitator,
-    setIncludeCurrentUserAsFacilitator,
-    programFieldErrors,
-    setProgramFieldErrors,
-    setProgramFieldError,
-    clearProgramFieldError,
-    isSubmittingProgram,
-    programSubmissionError,
-    programSubmissionSuccess,
-    programReturnScreen,
-    setProgramReturnScreen,
-    addProgramItems,
-    addProgramSections,
-    createProgramItemFromBlock,
-    removeProgramItem,
-    clearProgram,
-    shareProgram,
-    submitProgram,
-    setProgramSubmissionError,
-    setProgramSubmissionSuccess,
-  };
-
-  return (
-    <ProgramContext.Provider value={value}>{children}</ProgramContext.Provider>
+  const value = useMemo(
+    () => ({
+      shareThemes,
+      shareThemeId,
+      setShareThemeId,
+      shareSession,
+      setShareSession,
+      selectedSentenceIndexes,
+      setSelectedSentenceIndexes,
+      reflectionModalContext,
+      reflectionInput,
+      setReflectionInput,
+      showReflection,
+      closeReflection,
+      submitReflection,
+      verses,
+      addVerseFromBlock,
+      removeVerse,
+      programPassages,
+      programTitle,
+      setProgramTitle,
+      programNotes,
+      setProgramNotes,
+      programSessionDate,
+      setProgramSessionDate,
+      programSessionTime,
+      setProgramSessionTime,
+      programTimeZone,
+      setProgramTimeZone,
+      defaultProgramTimeZone,
+      programFrequency,
+      setProgramFrequency,
+      programParticipants,
+      setProgramParticipants,
+      programFacilitators,
+      setProgramFacilitators,
+      includeCurrentUserAsFacilitator,
+      setIncludeCurrentUserAsFacilitator,
+      programFieldErrors,
+      setProgramFieldErrors,
+      setProgramFieldError,
+      clearProgramFieldError,
+      isSubmittingProgram,
+      programSubmissionError,
+      programSubmissionSuccess,
+      programReturnScreen,
+      setProgramReturnScreen,
+      addProgramItems,
+      addProgramSections,
+      createProgramItemFromBlock,
+      removeProgramItem,
+      clearProgram,
+      shareProgram,
+      submitProgram,
+      setProgramSubmissionError,
+      setProgramSubmissionSuccess,
+    }),
+    [
+      addProgramItems,
+      addProgramSections,
+      addVerseFromBlock,
+      clearProgram,
+      clearProgramFieldError,
+      closeReflection,
+      createProgramItemFromBlock,
+      defaultProgramTimeZone,
+      includeCurrentUserAsFacilitator,
+      isSubmittingProgram,
+      programFacilitators,
+      programFieldErrors,
+      programFrequency,
+      programNotes,
+      programParticipants,
+      programPassages,
+      programReturnScreen,
+      programSessionDate,
+      programSessionTime,
+      programSubmissionError,
+      programSubmissionSuccess,
+      programTimeZone,
+      programTitle,
+      reflectionInput,
+      reflectionModalContext,
+      removeProgramItem,
+      removeVerse,
+      selectedSentenceIndexes,
+      setProgramFieldError,
+      shareProgram,
+      shareSession,
+      shareThemeId,
+      showReflection,
+      submitProgram,
+      submitReflection,
+      verses,
+    ],
   );
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
-export function useProgram() {
-  const context = useContext(ProgramContext);
+export function useApp() {
+  const context = useContext(AppContext);
   if (!context) {
-    throw new Error('useProgram must be used within a ProgramProvider');
+    throw new Error('useApp must be used within an AppProvider');
   }
   return context;
 }

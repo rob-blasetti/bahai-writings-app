@@ -1,6 +1,7 @@
 import React, { Fragment, useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import { NavigationTopBar } from '../components/NavigationTopBar';
+import BaseScreen from '../components/BaseScreen';
 import {
   extractPassageSentences,
   getShareableBlockText,
@@ -41,7 +42,7 @@ export default function ShareSelectionScreen({
   const selectionLimitReached = selectionCount >= maxSelections;
 
   return (
-    <View style={styles.screenSurface}>
+    <BaseScreen styles={styles}>
       <NavigationTopBar
         styles={styles}
         onBack={onClose}
@@ -106,6 +107,6 @@ export default function ShareSelectionScreen({
           <Text style={styles.shareNextButtonLabel}>Next</Text>
         </TouchableOpacity>
       </View>
-    </View>
+    </BaseScreen>
   );
 }

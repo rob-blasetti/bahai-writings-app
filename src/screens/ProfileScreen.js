@@ -1,5 +1,6 @@
 import React from 'react';
-import { Text, View } from 'react-native';
+import { Text } from 'react-native';
+import BaseScreen from '../components/BaseScreen';
 
 export default function ProfileScreen({
   styles,
@@ -16,7 +17,7 @@ export default function ProfileScreen({
       : '';
 
   return (
-    <View style={styles.bottomNavScreen}>
+    <BaseScreen styles={styles} variant="plain" style={styles.bottomNavScreen}>
       <Text style={styles.bottomNavScreenTitle}>Profile</Text>
       {isAuthenticated ? (
         <>
@@ -40,6 +41,6 @@ export default function ProfileScreen({
           Sign in with your Liquid Spirit account to personalize the app.
         </Text>
       )}
-    </View>
+    </BaseScreen>
   );
 }
