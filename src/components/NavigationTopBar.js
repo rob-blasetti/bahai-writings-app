@@ -10,6 +10,7 @@ export function NavigationTopBar({
   iconColor = '#3b2a15',
   containerStyle,
   title = null,
+  titleStyle,
 }) {
   const accessory =
     rightAccessory != null ? (
@@ -31,7 +32,13 @@ export function NavigationTopBar({
       {title ? (
         <View pointerEvents="none" style={styles.topBarTitleOverlay}>
           {typeof title === 'string' ? (
-            <Text style={styles.topBarTitle}>{title}</Text>
+            <Text
+              style={[styles.topBarTitle, titleStyle]}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {title}
+            </Text>
           ) : (
             title
           )}

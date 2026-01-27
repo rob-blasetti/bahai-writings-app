@@ -24,30 +24,5 @@ export function chunkSectionsBySize(
     return [];
   }
 
-  return sections.flatMap(section => {
-    const blocks = Array.isArray(section?.blocks) ? section.blocks : [];
-    const effectiveChunkSize = getSectionChunkSize(blocks.length, chunkSize);
-    if (blocks.length <= effectiveChunkSize) {
-      return section;
-    }
-
-    const chunkCount = Math.ceil(blocks.length / effectiveChunkSize);
-    const sectionTitle = section.title ?? 'Section';
-
-    return Array.from({ length: chunkCount }).map((_, index) => {
-      const start = index * effectiveChunkSize;
-      const end = Math.min(blocks.length, start + effectiveChunkSize);
-      const rangeLabel = `Passages ${start + 1}-${end}`;
-      const partLabel = chunkCount > 1 ? `Part ${index + 1}` : null;
-      const chunkTitle = partLabel
-        ? `${sectionTitle} · ${partLabel} (${rangeLabel})`
-        : `${sectionTitle} · ${rangeLabel}`;
-      return {
-        ...section,
-        id: `${section.id}-part-${index + 1}`,
-        title: chunkTitle,
-        blocks: blocks.slice(start, end),
-      };
-    });
-  });
+  return sections;
 }

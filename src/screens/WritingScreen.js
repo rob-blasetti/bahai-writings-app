@@ -54,19 +54,16 @@ export default function WritingScreen({
         styles={styles}
         onBack={onBack}
         backAccessibilityLabel="Back to library"
-        rightAccessory={
-          <ProgramIconButton
-            styles={styles}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
-            onPress={onOpenProgram}
-          />
-        }
+        title={selectedWriting.title}
+        titleStyle={styles.topBarTitleSmall}
       />
-      <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-        {selectedWriting.title}
-      </Text>
-      <Text style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}>
+      <Text
+        style={[
+          styles.detailSubtitle,
+          scaledTypography.detailSubtitle,
+          { marginTop: 0 },
+        ]}
+      >
         Choose a section to read.
       </Text>
       <FlatList

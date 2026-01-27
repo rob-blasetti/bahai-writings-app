@@ -280,6 +280,7 @@ export const appStyles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
+    paddingHorizontal: 56,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -287,6 +288,11 @@ export const appStyles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#3b2a15',
+    textAlign: 'center',
+  },
+  topBarTitleSmall: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   screenSurface: {
     flex: 1,
@@ -1191,8 +1197,16 @@ export const appStyles = StyleSheet.create({
   sectionPagerFooter: {
     paddingTop: 8,
   },
+  sectionPagerFooterRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
   sectionEmptyText: {
     paddingHorizontal: 20,
+  },
+  sectionPagerIndicatorInline: {
+    marginBottom: 0,
   },
   settingsGroup: {
     marginTop: 16,

@@ -149,16 +149,7 @@ export default function SectionScreen({
           : null;
 
       return (
-        <View
-          style={[styles.sectionPagerItem, { width: sectionPageWidth }]}
-        >
-          {passagePositionLabel ? (
-            <View style={styles.sectionPagerIndicator}>
-              <Text style={styles.sectionPagerIndicatorLabel}>
-                {passagePositionLabel}
-              </Text>
-            </View>
-          ) : null}
+        <View style={[styles.sectionPagerItem, { width: sectionPageWidth }]}>
           <Passage
             style={styles.sectionPassageCard}
             contentStyle={styles.sectionPassageContent}
@@ -192,59 +183,77 @@ export default function SectionScreen({
                 })}
               </View>
             </ScrollView>
-            <View style={[styles.sectionPagerFooter, styles.actionChipRow]}>
-              <TouchableOpacity
-                accessibilityLabel="Add passage to devotional program"
-                onPress={() =>
-                  onAddToProgram({
-                    block: item,
-                    writingId: selectedWriting.id,
-                    writingTitle: selectedWriting.title,
-                    sectionId: selectedSection.id,
-                    sectionTitle: selectedSection.title,
-                  })
-                }
-                style={[styles.shareActionChip, styles.chipInRow]}
-              >
-                <Ionicons name="book-outline" size={20} color="#3b2a15" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Share this passage"
-                onPress={() =>
-                  onShare({
-                    block: item,
-                    writingTitle: selectedWriting.title,
-                    sectionTitle: selectedSection.title,
-                    returnScreen: 'section',
-                  })
-                }
-                style={[
-                  styles.shareActionChip,
-                  styles.chipInRow,
-                  styles.chipSpacing,
-                ]}
-              >
-                <Ionicons name="paper-plane-outline" size={20} color="#3b2a15" />
-              </TouchableOpacity>
-              <TouchableOpacity
-                accessibilityLabel="Add passage to My Verses"
-                onPress={() =>
-                  onAddToMyVerses({
-                    block: item,
-                    writingId: selectedWriting.id,
-                    writingTitle: selectedWriting.title,
-                    sectionId: selectedSection.id,
-                    sectionTitle: selectedSection.title,
-                  })
-                }
-                style={[
-                  styles.shareActionChip,
-                  styles.chipInRow,
-                  styles.chipSpacing,
-                ]}
-              >
-                <Ionicons name="heart-outline" size={20} color="#3b2a15" />
-              </TouchableOpacity>
+            <View style={styles.sectionPagerFooter}>
+              <View style={styles.sectionPagerFooterRow}>
+                {passagePositionLabel ? (
+                  <View
+                    style={[
+                      styles.sectionPagerIndicator,
+                      styles.sectionPagerIndicatorInline,
+                    ]}
+                  >
+                    <Text style={styles.sectionPagerIndicatorLabel}>
+                      {passagePositionLabel}
+                    </Text>
+                  </View>
+                ) : (
+                  <View />
+                )}
+                <View style={styles.actionChipRow}>
+                  <TouchableOpacity
+                    accessibilityLabel="Add passage to devotional program"
+                    onPress={() =>
+                      onAddToProgram({
+                        block: item,
+                        writingId: selectedWriting.id,
+                        writingTitle: selectedWriting.title,
+                        sectionId: selectedSection.id,
+                        sectionTitle: selectedSection.title,
+                      })
+                    }
+                    style={[styles.shareActionChip, styles.chipInRow]}
+                  >
+                    <Ionicons name="book-outline" size={20} color="#3b2a15" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityLabel="Share this passage"
+                    onPress={() =>
+                      onShare({
+                        block: item,
+                        writingTitle: selectedWriting.title,
+                        sectionTitle: selectedSection.title,
+                        returnScreen: 'section',
+                      })
+                    }
+                    style={[
+                      styles.shareActionChip,
+                      styles.chipInRow,
+                      styles.chipSpacing,
+                    ]}
+                  >
+                    <Ionicons name="paper-plane-outline" size={20} color="#3b2a15" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    accessibilityLabel="Add passage to My Verses"
+                    onPress={() =>
+                      onAddToMyVerses({
+                        block: item,
+                        writingId: selectedWriting.id,
+                        writingTitle: selectedWriting.title,
+                        sectionId: selectedSection.id,
+                        sectionTitle: selectedSection.title,
+                      })
+                    }
+                    style={[
+                      styles.shareActionChip,
+                      styles.chipInRow,
+                      styles.chipSpacing,
+                    ]}
+                  >
+                    <Ionicons name="heart-outline" size={20} color="#3b2a15" />
+                  </TouchableOpacity>
+                </View>
+              </View>
             </View>
           </Passage>
         </View>
@@ -281,6 +290,8 @@ export default function SectionScreen({
           styles={styles}
           onBack={onBack}
           backAccessibilityLabel="Back to sections"
+          title={selectedWriting.title}
+          titleStyle={styles.topBarTitleSmall}
           containerStyle={styles.sectionHeaderTopRow}
           rightAccessory={
             <ProgramIconButton
@@ -291,9 +302,6 @@ export default function SectionScreen({
             />
           }
         />
-        <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-          {selectedWriting.title}
-        </Text>
         <Text
           style={[
             styles.sectionDetailTitle,

@@ -15,6 +15,18 @@ export const WRITING_COLLECTIONS = [
     key: 'shoghi-effendi',
     label: 'Writings of Shoghi Effendi',
   },
+  {
+    key: 'prayers',
+    label: 'Prayers',
+  },
+  {
+    key: 'universal-house-of-justice',
+    label: 'The Universal House of Justice',
+  },
+  {
+    key: 'compilations',
+    label: 'Compilations',
+  },
 ];
 
 const DIACRITICS_REGEX = /[\u0300-\u036f]/g;
@@ -52,6 +64,19 @@ export function inferCollectionKey(writing) {
   const compact = normalized.replace(/['\s]+/g, '');
   if (!normalized) {
     return 'bahaullah';
+  }
+  if (
+    normalized.includes('universal house of justice') ||
+    compact.includes('universalhouseofjustice') ||
+    /\buhj\b/.test(normalized)
+  ) {
+    return 'universal-house-of-justice';
+  }
+  if (/\bprayers?\b/.test(normalized)) {
+    return 'prayers';
+  }
+  if (/\bcompilation(s)?\b/.test(normalized)) {
+    return 'compilations';
   }
   if (/\bbab\b/.test(normalized)) {
     return 'bab';
