@@ -52,28 +52,6 @@ export default function LibraryScreen({
           </Text>
           <SettingsIconButton styles={styles} onPress={onOpenSettings} />
         </View>
-        <View style={styles.homeHeaderActions}>
-          {onOpenCollections ? (
-            <CollectionsIconButton
-              styles={styles}
-              style={styles.homeActionButtonSpacing}
-              onPress={onOpenCollections}
-            />
-          ) : null}
-          <ProgramIconButton
-            styles={styles}
-            showLabel
-            style={styles.homeActionButtonSpacing}
-            hasProgramPassages={hasProgramPassages}
-            programBadgeLabel={programBadgeLabel}
-            onPress={onOpenProgram}
-          />
-          <RandomIconButton
-            styles={styles}
-            hasPassages={hasPassages}
-            onPress={onShowRandomPassage}
-          />
-        </View>
       </View>
       <FlatList
         data={writings}

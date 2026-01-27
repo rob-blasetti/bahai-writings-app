@@ -64,6 +64,7 @@ export default function PassageScreen({
         styles={styles}
         onBack={onBack}
         backAccessibilityLabel="Back"
+        title="Daily Passage"
         rightAccessory={
           <ProgramIconButton
             styles={styles}
@@ -73,9 +74,6 @@ export default function PassageScreen({
           />
         }
       />
-      <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-        Daily Passage
-      </Text>
       <ScrollView contentContainerStyle={styles.contentScroll}>
         <View style={styles.passageMeta}>
           <Text style={styles.passageMetaLabel}>From</Text>

@@ -3,7 +3,7 @@ import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
 const TABS = [
-  { key: 'home', label: 'Home', icon: 'home-outline', activeIcon: 'home' },
+  { key: 'explore', label: 'Explore', icon: 'home-outline', activeIcon: 'home' },
   { key: 'search', label: 'Search', icon: 'search-outline', activeIcon: 'search' },
   { key: 'profile', label: 'Profile', icon: 'person-outline', activeIcon: 'person' },
   {

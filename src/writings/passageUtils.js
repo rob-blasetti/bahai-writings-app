@@ -105,3 +105,12 @@ export function createPassageSnapshot({
     sectionTitle: sectionTitle ?? null,
   };
 }
+
+export function selectRandomPassage(passages = []) {
+  if (!Array.isArray(passages) || passages.length === 0) {
+    return null;
+  }
+
+  const randomIndex = Math.floor(Math.random() * passages.length);
+  return passages[randomIndex];
+}

@@ -1,16 +1,9 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
+import Card from '../components/Card';
 
-const formatCount = count => {
-  if (count === 0) {
-    return 'No writings yet';
-  }
-  if (count === 1) {
-    return '1 writing';
-  }
-  return `${count} writings`;
-};
+const formatCount = count => `${count ?? 0}`;
 
 export default function WritingsCollectionScreen({
   styles,
@@ -25,23 +18,23 @@ export default function WritingsCollectionScreen({
           Select a collection to explore the library.
         </Text>
       </View>
-      <View style={styles.homeList}>
+      <ScrollView
+        style={styles.homeList}
+        contentContainerStyle={[styles.homeListContent, styles.cardGrid]}
+        showsVerticalScrollIndicator={false}
+      >
         {collections.map(collection => (
-          <TouchableOpacity
+          <Card
             key={collection.key}
+            styles={styles}
             onPress={() => onSelectCollection?.(collection.key)}
-            style={styles.homeCard}
-            accessibilityRole="button"
             accessibilityLabel={collection.label}
             accessibilityHint={`Opens ${collection.label}`}
-          >
-            <Text style={styles.homeCardTitle}>{collection.label}</Text>
-            <Text style={styles.homeCardSubtitle}>
-              {formatCount(collection.count ?? 0)}
-            </Text>
-          </TouchableOpacity>
+            title={collection.label}
+            chipLabel={formatCount(collection.count)}
+          />
         ))}
-      </View>
+      </ScrollView>
     </BaseScreen>
   );
 }

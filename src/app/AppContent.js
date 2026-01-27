@@ -21,6 +21,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import writingsManifest from '../../assets/generated/writings.json';
 import StartScreen from '../screens/StartScreen';
 import SignInScreen from '../screens/SignInScreen';
+import ExploreScreen from '../screens/ExploreScreen';
 import WritingsCollectionScreen from '../screens/WritingsCollectionScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
@@ -45,7 +46,11 @@ import {
   buildSearchableSections,
   searchSectionsByTheme as findSectionsByTheme,
 } from '../writings/searchEngine';
-import { cleanBlockText, extractPassageSentences } from '../writings/passageUtils';
+import {
+  cleanBlockText,
+  extractPassageSentences,
+  selectRandomPassage,
+} from '../writings/passageUtils';
 import { getSectionsForWriting } from '../writings/writingParser';
 import {
   WRITING_COLLECTIONS,
@@ -162,7 +167,7 @@ function AppContent() {
   const [isNavigationReady, setIsNavigationReady] = useState(false);
   const pendingNavigationRef = useRef(null);
   const [currentScreen, setCurrentScreen] = useState('start');
-  const [activeBottomTab, setActiveBottomTab] = useState('home');
+  const [activeBottomTab, setActiveBottomTab] = useState('explore');
   const [activeCollectionKey, setActiveCollectionKey] = useState(null);
   const [selectedWritingId, setSelectedWritingId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
@@ -587,13 +592,13 @@ function AppContent() {
   );
 
   const handleShowRandomPassage = () => {
-    if (availablePassages.length === 0) {
+    const nextPassage = selectRandomPassage(availablePassages);
+    if (!nextPassage) {
       setRandomPassage(null);
       return;
     }
 
-    const randomIndex = Math.floor(Math.random() * availablePassages.length);
-    setRandomPassage(availablePassages[randomIndex]);
+    setRandomPassage(nextPassage);
     navigateToScreen('passage');
   };
 
@@ -673,7 +678,7 @@ function AppContent() {
       if (!BOTTOM_TAB_SET.has(tabKey)) {
         return;
       }
-      const targetScreen = tabKey === 'home' ? 'collections' : tabKey;
+      const targetScreen = tabKey;
       if (targetScreen === currentScreen) {
         return;
       }
@@ -694,7 +699,7 @@ function AppContent() {
     await continueAsGuest();
     setAuthPassword('');
     setAuthError(null);
-    navigateToScreen('collections');
+    navigateToScreen('explore');
   };
 
   const handleOpenCollections = () => {
@@ -708,6 +713,10 @@ function AppContent() {
     setRandomPassage(null);
     setProgramReturnScreen(null);
     navigateToScreen('home');
+  };
+
+  const handleOpenPrayers = () => {
+    handleSelectCollection('prayers');
   };
 
   const handleStartSignIn = () => {
@@ -734,7 +743,7 @@ function AppContent() {
     const result = await signIn();
     if (result.success) {
       const display = result.user?.name ?? 'Friend';
-      navigateToScreen('collections');
+      navigateToScreen('explore');
       Alert.alert(
         'Signed in',
         display ? `Welcome, ${display}!` : 'You are signed in.',
@@ -1079,8 +1088,8 @@ function AppContent() {
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
   const isReflectionModalVisible = Boolean(reflectionModalContext);
   useEffect(() => {
-    if (currentScreen === 'collections') {
-      setActiveBottomTab('home');
+    if (currentScreen === 'collections' || currentScreen === 'home') {
+      setActiveBottomTab('explore');
       return;
     }
     if (BOTTOM_TAB_SET.has(currentScreen)) {
@@ -1430,6 +1439,19 @@ function AppContent() {
                 onChangePassword={setAuthPassword}
                 onSignIn={handleSignIn}
                 onCancel={handleCancelSignIn}
+              />,
+            )
+          }
+        </Stack.Screen>
+        <Stack.Screen name="explore">
+          {() =>
+            renderScreenSurface(
+              <ExploreScreen
+                styles={styles}
+                onReadWritings={handleOpenCollections}
+                onOpenPrayers={handleOpenPrayers}
+                onChooseRandom={handleShowRandomPassage}
+                onCreateDevotional={handleOpenProgram}
               />,
             )
           }

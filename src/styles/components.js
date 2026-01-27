@@ -233,6 +233,11 @@ export const appStyles = StyleSheet.create({
     flex: 1,
     marginTop: 20,
   },
+  cardGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
   homeListContent: {
     paddingBottom: 20,
   },
@@ -259,6 +264,60 @@ export const appStyles = StyleSheet.create({
     fontSize: 14,
     color: '#6f5a35',
     marginTop: 4,
+  },
+  cardContainer: {
+    borderRadius: 20,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    marginBottom: 16,
+    overflow: 'hidden',
+  },
+  cardHalfWidth: {
+    width: '48%',
+  },
+  cardImageWrapper: {
+    width: '100%',
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cardImage: {
+    width: '100%',
+    height: 130,
+  },
+  cardImagePlaceholder: {
+    backgroundColor: '#efe6d6',
+  },
+  cardChip: {
+    position: 'absolute',
+    right: 10,
+    bottom: 10,
+  },
+  cardText: {
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  cardTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#2c1f0c',
+  },
+  cardSubtitle: {
+    marginTop: 6,
+    fontSize: 14,
+    color: '#6f5a35',
+    lineHeight: 20,
+  },
+  chip: {
+    backgroundColor: '#3b2a15',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  chipLabel: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   topBar: {
     flexDirection: 'row',
