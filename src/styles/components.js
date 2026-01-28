@@ -353,6 +353,23 @@ export const appStyles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
   },
+  topBarTitleStack: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarTitlePrimary: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#3b2a15',
+    textAlign: 'center',
+  },
+  topBarTitleSecondary: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#6f5a35',
+    textAlign: 'center',
+    marginTop: 2,
+  },
   screenSurface: {
     flex: 1,
     borderRadius: 16,

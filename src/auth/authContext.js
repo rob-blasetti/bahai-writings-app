@@ -30,6 +30,7 @@ function usePersistedUserState() {
   const [authError, setAuthError] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [hasHydratedAuth, setHasHydratedAuth] = useState(false);
+  const [authMode, setAuthMode] = useState(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -51,10 +52,12 @@ function usePersistedUserState() {
         };
         setUser(normalizedUser);
         setAuthEmail(persisted.email ?? '');
+        setAuthMode('user');
       }
 
       if (persisted?.mode === 'guest') {
         setUser(null);
+        setAuthMode('guest');
       }
 
       setHasHydratedAuth(true);
@@ -80,6 +83,8 @@ function usePersistedUserState() {
     setIsAuthenticating,
     hasHydratedAuth,
     setHasHydratedAuth,
+    authMode,
+    setAuthMode,
   };
 }
 
@@ -96,6 +101,8 @@ export function AuthProvider({ children }) {
     isAuthenticating,
     setIsAuthenticating,
     hasHydratedAuth,
+    authMode,
+    setAuthMode,
   } = usePersistedUserState();
 
   const normalizeUserFromPayload = useCallback(
@@ -145,6 +152,7 @@ export function AuthProvider({ children }) {
       });
       const normalizedUser = normalizeUserFromPayload(result, trimmedEmail);
       setUser(normalizedUser);
+      setAuthMode('user');
       await savePersistedAuthState({
         mode: 'user',
         ...normalizedUser,
@@ -165,23 +173,25 @@ export function AuthProvider({ children }) {
     setUser(null);
     setAuthError(null);
     setAuthPassword('');
+    setAuthMode('guest');
     await savePersistedAuthState({
       mode: 'guest',
       savedAt: Date.now(),
     });
-  }, [setAuthError, setAuthPassword, setUser]);
+  }, [setAuthError, setAuthPassword, setAuthMode, setUser]);
 
   const logout = useCallback(async () => {
     setIsAuthenticating(false);
     setUser(null);
     setAuthPassword('');
     setAuthError(null);
+    setAuthMode(null);
     try {
       await clearPersistedAuthState();
     } catch (error) {
       console.warn('[Auth] Unable to clear persisted auth during logout', error);
     }
-  }, [setAuthError, setAuthPassword, setIsAuthenticating, setUser]);
+  }, [setAuthError, setAuthPassword, setAuthMode, setIsAuthenticating, setUser]);
 
   const value = useMemo(
     () => ({
@@ -194,6 +204,8 @@ export function AuthProvider({ children }) {
       setAuthError,
       isAuthenticating,
       hasHydratedAuth,
+      authMode,
+      isGuest: authMode === 'guest',
       signIn,
       continueAsGuest,
       logout,
@@ -202,6 +214,7 @@ export function AuthProvider({ children }) {
       authEmail,
       authError,
       authPassword,
+      authMode,
       continueAsGuest,
       hasHydratedAuth,
       isAuthenticating,

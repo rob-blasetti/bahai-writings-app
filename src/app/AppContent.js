@@ -1,44 +1,22 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Dimensions,
   Linking,
   Share as NativeShare,
-  Text,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigationContainerRef } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import writingsManifest from '../../assets/generated/writings.json';
-import StartScreen from '../screens/StartScreen';
-import SignInScreen from '../screens/SignInScreen';
-import ExploreScreen from '../screens/ExploreScreen';
-import WritingsCollectionScreen from '../screens/WritingsCollectionScreen';
-import LibraryScreen from '../screens/LibraryScreen';
-import SettingsScreen from '../screens/SettingsScreen';
-import ShareSelectionScreen from '../screens/ShareSelectionScreen';
-import ShareEditorScreen from '../screens/ShareEditorScreen';
-import ProgramScreen from '../screens/ProgramScreen';
-import WritingScreen from '../screens/WritingScreen';
-import SectionScreen from '../screens/SectionScreen';
-import PassageScreen from '../screens/PassageScreen';
-import UnavailableScreen from '../screens/UnavailableScreen';
-import SearchScreen from '../screens/SearchScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import MyVersesScreen from '../screens/MyVersesScreen';
-import { BottomNavigationBar } from '../components/BottomNavigationBar';
 import ReflectionModal from '../components/ReflectionModal';
 import BaseScreen from '../components/BaseScreen';
-import { AppNavigationContainer, BOTTOM_TAB_SET } from '../navigation';
+import {
+  AppNavigationContainer,
+  AppNavigator,
+  AuthNavigator,
+  useAppNavigation,
+} from '../navigation';
 import { useAuth } from '../auth/authContext';
 import { PROGRAM_FREQUENCY_OPTIONS } from '../programs/programUtils';
 import { useApp } from './appContext';
@@ -57,12 +35,12 @@ import {
   inferCollectionKey,
 } from '../writings/collectionUtils';
 import { getShareableBlockText } from '../sharing/shareUtils';
+import { useBlockRenderer } from '../writings/useBlockRenderer';
 import { appStyles } from '../styles/components';
 
 const styles = appStyles;
 const SHARE_SELECTION_LIMIT = 2;
 const SEARCH_HIGHLIGHT_DURATION_MS = 2500;
-const Stack = createNativeStackNavigator();
 const sectionPagerRef = { current: null };
 const pendingSectionBlockIndexRef = { current: null };
 const searchHighlightTimeoutRef = { current: null };
@@ -103,6 +81,7 @@ function AppContent() {
     setAuthError,
     isAuthenticating,
     hasHydratedAuth,
+    authMode,
     signIn,
     continueAsGuest,
     logout,
@@ -163,11 +142,15 @@ function AppContent() {
     addVerseFromBlock,
     removeVerse,
   } = useApp();
-  const navigationRef = useNavigationContainerRef();
-  const [isNavigationReady, setIsNavigationReady] = useState(false);
-  const pendingNavigationRef = useRef(null);
-  const [currentScreen, setCurrentScreen] = useState('start');
-  const [activeBottomTab, setActiveBottomTab] = useState('explore');
+  const {
+    navigationRef,
+    currentScreen,
+    navigateToScreen,
+    handleNavigationReady,
+    handleNavigationStateChange,
+    goBack,
+  } = useAppNavigation();
+  const isInAppFlow = authMode === 'user' || authMode === 'guest';
   const [activeCollectionKey, setActiveCollectionKey] = useState(null);
   const [selectedWritingId, setSelectedWritingId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
@@ -299,51 +282,6 @@ function AppContent() {
     const nextIndex = viewableItems[0].index ?? 0;
     setSectionBlockIndex(nextIndex);
   };
-  const navigationReady = isNavigationReady && navigationRef.isReady();
-  const flushPendingNavigation = useCallback(() => {
-    if (!navigationReady || !pendingNavigationRef.current) {
-      return;
-    }
-    const { screenName, params } = pendingNavigationRef.current;
-    pendingNavigationRef.current = null;
-    if (params) {
-      navigationRef.navigate(screenName, params);
-    } else {
-      navigationRef.navigate(screenName);
-    }
-  }, [navigationReady, navigationRef]);
-  useEffect(() => {
-    flushPendingNavigation();
-  }, [flushPendingNavigation]);
-  const navigateToScreen = useCallback(
-    (screenName, params) => {
-      if (navigationReady) {
-        if (params) {
-          navigationRef.navigate(screenName, params);
-        } else {
-          navigationRef.navigate(screenName);
-        }
-        return;
-      }
-      pendingNavigationRef.current = { screenName, params };
-    },
-    [navigationReady, navigationRef],
-  );
-  const handleNavigationReady = useCallback(() => {
-    setIsNavigationReady(true);
-    const initialRoute = navigationRef.getCurrentRoute();
-    if (initialRoute?.name) {
-      setCurrentScreen(initialRoute.name);
-    }
-  }, [navigationRef]);
-  const handleNavigationStateChange = useCallback(() => {
-    const nextRouteName = navigationRef.getCurrentRoute()?.name;
-    if (nextRouteName) {
-      setCurrentScreen(previous =>
-        previous === nextRouteName ? previous : nextRouteName,
-      );
-    }
-  }, [navigationRef]);
   useEffect(() => {
     return () => {
       if (searchHighlightTimeoutRef.current) {
@@ -366,6 +304,14 @@ function AppContent() {
     }
     return 'Back';
   }, [shareSession]);
+  const activeShareTheme = useMemo(() => {
+    if (!Array.isArray(shareThemes) || shareThemes.length === 0) {
+      return null;
+    }
+    return (
+      shareThemes.find(theme => theme.id === shareThemeId) ?? shareThemes[0]
+    );
+  }, [shareThemeId, shareThemes]);
   const selectedWriting = useMemo(
     () =>
       scopedWritings.find(item => item.id === selectedWritingId) ?? null,
@@ -673,20 +619,6 @@ function AppContent() {
     [showReflection],
   );
 
-  const handleBottomTabPress = useCallback(
-    tabKey => {
-      if (!BOTTOM_TAB_SET.has(tabKey)) {
-        return;
-      }
-      const targetScreen = tabKey;
-      if (targetScreen === currentScreen) {
-        return;
-      }
-      navigateToScreen(targetScreen);
-    },
-    [currentScreen, navigateToScreen],
-  );
-
   const handleCloseReflectionModal = useCallback(() => {
     closeReflection();
   }, [closeReflection]);
@@ -699,7 +631,6 @@ function AppContent() {
     await continueAsGuest();
     setAuthPassword('');
     setAuthError(null);
-    navigateToScreen('explore');
   };
 
   const handleOpenCollections = () => {
@@ -743,7 +674,6 @@ function AppContent() {
     const result = await signIn();
     if (result.success) {
       const display = result.user?.name ?? 'Friend';
-      navigateToScreen('explore');
       Alert.alert(
         'Signed in',
         display ? `Welcome, ${display}!` : 'You are signed in.',
@@ -1050,7 +980,7 @@ function AppContent() {
   };
 
   const handleCloseSettings = () => {
-    navigateToScreen('home');
+    goBack();
   };
 
   const handleLogout = useCallback(async () => {
@@ -1059,11 +989,10 @@ function AppContent() {
     setSelectedWritingId(null);
     setSelectedSectionId(null);
     setRandomPassage(null);
-    navigateToScreen('start');
-  }, [logout, navigateToScreen]);
+  }, [logout]);
 
   const handleBackToHome = () => {
-    navigateToScreen('home');
+    goBack();
     setSelectedWritingId(null);
     setSelectedSectionId(null);
     setRandomPassage(null);
@@ -1071,7 +1000,7 @@ function AppContent() {
   };
 
   const handleBackToSections = () => {
-    navigateToScreen('writing');
+    goBack();
   };
 
   const handleSelectFontScale = value => {
@@ -1087,287 +1016,16 @@ function AppContent() {
   const hasPassages = availablePassages.length > 0;
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
   const isReflectionModalVisible = Boolean(reflectionModalContext);
-  useEffect(() => {
-    if (currentScreen === 'collections' || currentScreen === 'home') {
-      setActiveBottomTab('explore');
-      return;
-    }
-    if (BOTTOM_TAB_SET.has(currentScreen)) {
-      setActiveBottomTab(currentScreen);
-    }
-  }, [currentScreen]);
-  const showBottomNav = currentScreen !== 'start';
-
-  const renderBlockContent = (block, index, options = {}) => {
-    if (!block) {
-      return null;
-    }
-    const { writingTitle = null, sectionTitle = null } = options;
-    const normalizedBlockText =
-      typeof block.text === 'string' ? block.text.trim() : '';
-    const canOpenReflection = normalizedBlockText.length > 0;
-    const isHighlightedBlock =
-      activeSearchHighlight &&
-      activeSearchHighlight.blockId === block.id &&
-      activeSearchHighlight.sectionId === selectedSectionId &&
-      activeSearchHighlight.writingId === selectedWritingId;
-    const highlightTerm =
-      isHighlightedBlock && activeSearchHighlight.normalizedTerm
-        ? activeSearchHighlight.normalizedTerm
-        : null;
-
-    const renderHighlightedContent = text => {
-      if (
-        !highlightTerm ||
-        typeof text !== 'string' ||
-        text.length === 0
-      ) {
-        return text;
-      }
-      try {
-        const regex = new RegExp(`(${escapeRegExp(highlightTerm)})`, 'ig');
-        return text.split(regex).map((part, idx) => {
-          if (part.length === 0) {
-            return null;
-          }
-          if (part.toLowerCase() === highlightTerm) {
-            return (
-              <Text
-                key={`${block.id}-highlight-${idx}`}
-                style={styles.searchHighlightText}
-              >
-                {part}
-              </Text>
-            );
-          }
-          return part;
-        });
-      } catch (error) {
-        return text;
-      }
-    };
-
-    const wrapBlock = (
-      children,
-      wrapperStyle = [styles.blockContainer, index === 0 && styles.firstBlock],
-    ) => {
-      const baseStyles = Array.isArray(wrapperStyle)
-        ? wrapperStyle
-        : [wrapperStyle];
-      const styleArray = baseStyles.filter(Boolean);
-      if (canOpenReflection) {
-        return (
-          <TouchableOpacity
-            style={styleArray}
-            activeOpacity={0.85}
-            onPress={() =>
-              handleShowReflectionModal({
-                block,
-                writingTitle,
-                sectionTitle,
-              })
-            }
-          >
-            {children}
-          </TouchableOpacity>
-        );
-      }
-      return <View style={styleArray}>{children}</View>;
-    };
-
-    const renderTextWithNumber = ({
-      text,
-      style,
-      key,
-      numberStyle,
-    }) => {
-      if (typeof text !== 'string' || text.length === 0) {
-        return null;
-      }
-
-      const numberMatch =
-        text.match(/^(\d{1,3})([.)]\s+)([\s\S]+)$/) ||
-        text.match(/^(\d{1,3})(\s{2,})([\s\S]+)$/);
-
-      if (!numberMatch) {
-        return (
-          <Text key={key} style={style}>
-            {renderHighlightedContent(text)}
-          </Text>
-        );
-      }
-
-      const number = numberMatch[1];
-      const delimiter = numberMatch[2];
-      const remainder = numberMatch[3] ?? '';
-      const normalizedDelimiter = /\s{2,}/.test(delimiter)
-        ? ' '
-        : delimiter;
-      const numberStyleArray = Array.isArray(numberStyle)
-        ? numberStyle
-        : numberStyle
-        ? [numberStyle]
-        : [];
-
-      return (
-        <Text key={key} style={style}>
-          <Text
-            style={[
-              styles.passageNumber,
-              scaledTypography.passageNumber,
-              ...numberStyleArray,
-            ]}
-          >
-            {number}
-          </Text>
-          {normalizedDelimiter}
-          {renderHighlightedContent(remainder)}
-        </Text>
-      );
-    };
-
-    const hasFootnotes = Array.isArray(block.footnotes) && block.footnotes.length > 0;
-    const hasAttribution =
-      typeof block.attribution === 'string' && block.attribution.length > 0;
-    const renderMeta = () => {
-      if (!hasFootnotes && !hasAttribution) {
-        return null;
-      }
-      return (
-        <>
-          {hasAttribution ? (
-            <Text
-              style={[
-                styles.attributionText,
-                scaledTypography.attributionText,
-              ]}
-            >
-              {block.attribution}
-            </Text>
-          ) : null}
-          {hasFootnotes ? (
-            <View style={styles.footnoteContainer}>
-              {block.footnotes.map((footnote, footnoteIndex) => (
-                renderTextWithNumber({
-                  key: `${block.id}-footnote-${footnoteIndex}`,
-                  text: footnote,
-                  style: [
-                    styles.footnoteText,
-                    scaledTypography.footnoteText,
-                  ],
-                })
-              ))}
-            </View>
-          ) : null}
-        </>
-      );
-    };
-
-    if (block.type === 'heading') {
-      return (
-        <Text
-          style={[
-            styles.contentHeading,
-            index === 0 && styles.contentHeadingFirst,
-            scaledTypography.contentHeading,
-          ]}
-        >
-          {renderHighlightedContent(block.text)}
-        </Text>
-      );
-    }
-
-    if (block.type === 'quote') {
-      const meta = renderMeta();
-      return wrapBlock(
-        <>
-          <View style={[styles.quoteBlock, index === 0 && styles.firstBlock]}>
-            <Text style={[styles.quoteText, scaledTypography.quoteText]}>
-              {renderHighlightedContent(block.text)}
-            </Text>
-          </View>
-          {meta}
-        </>,
-        [styles.blockContainer],
-      );
-    }
-
-    if (block.type === 'poetry') {
-      const meta = renderMeta();
-      return wrapBlock(
-        <>
-          <View style={[styles.poetryBlock, index === 0 && styles.firstBlock]}>
-            {block.text.split('\n').map((line, lineIndex) =>
-              renderTextWithNumber({
-                key: `${block.id}-line-${lineIndex}`,
-                text: line,
-                style: [styles.poetryLine, scaledTypography.poetryLine],
-              }),
-            )}
-          </View>
-          {meta}
-        </>,
-      );
-    }
-
-    if (block.type === 'list') {
-      const meta = renderMeta();
-      return wrapBlock(
-        <>
-          <View style={[styles.listBlock, index === 0 && styles.firstBlock]}>
-            {block.text.split('\n').map((line, lineIndex) =>
-              renderTextWithNumber({
-                key: `${block.id}-item-${lineIndex}`,
-                text: line,
-                style: [styles.listItemText, scaledTypography.listItemText],
-              }),
-            )}
-          </View>
-          {meta}
-        </>,
-      );
-    }
-
-    const meta = renderMeta();
-    return wrapBlock(
-      <>
-        {block.text
-          ? renderTextWithNumber({
-              text: block.text,
-              style: [
-                styles.contentParagraph,
-                index === 0 && styles.contentParagraphFirst,
-                scaledTypography.contentParagraph,
-              ],
-            })
-          : null}
-        {meta}
-      </>,
-    );
-  };
+  const renderBlockContent = useBlockRenderer({
+    styles,
+    scaledTypography,
+    activeSearchHighlight,
+    selectedSectionId,
+    selectedWritingId,
+    onShowReflection: handleShowReflectionModal,
+  });
 
   const displayName = authenticatedUser?.name ?? 'Kali';
-
-  const stackScreenOptions = useCallback(
-    ({ route }) => {
-      const isBottomTabScreen = BOTTOM_TAB_SET.has(route.name);
-      if (isBottomTabScreen) {
-        return {
-          headerShown: false,
-          gestureEnabled: false,
-          fullScreenGestureEnabled: false,
-          animation: 'none',
-        };
-      }
-      return {
-        headerShown: false,
-        gestureEnabled: true,
-        fullScreenGestureEnabled: true,
-        animation: 'slide_from_right',
-      };
-    },
-    [],
-  );
 
   if (!hasHydratedAuth) {
     return (
@@ -1385,13 +1043,6 @@ function AppContent() {
   const renderScreenSurface = child => (
     <View style={styles.container}>
       <View style={styles.screenContentWrapper}>{child}</View>
-      {showBottomNav ? (
-        <BottomNavigationBar
-          activeTab={activeBottomTab}
-          onTabPress={handleBottomTabPress}
-          safeAreaInsets={safeAreaInsets}
-        />
-      ) : null}
       <ReflectionModal
         visible={isReflectionModalVisible}
         styles={styles}
@@ -1404,354 +1055,157 @@ function AppContent() {
     </View>
   );
 
+  const screenState = {
+    styles,
+    scaledTypography,
+    displayName,
+    authenticatedUser,
+    auth: {
+      email: authEmail,
+      password: authPassword,
+      error: authError,
+      isAuthenticating,
+    },
+    content: {
+      collectionOptions,
+      activeCollection,
+      scopedWritings,
+      selectedWriting,
+      writingSections,
+      selectedSection,
+      randomPassage,
+      searchableSections,
+      activeSearchHighlight,
+      sectionBlockIndex,
+      sectionPagerRef,
+      sectionPageWidth,
+      sectionViewabilityConfig,
+      sectionViewableItemsChanged,
+      renderBlockContent,
+      hasPassages,
+    },
+    program: {
+      passages: programPassages,
+      backButtonLabel: programBackButtonLabel,
+      hasPassages: hasProgramPassages,
+      badgeLabel: programBadgeLabel,
+      title: programTitle,
+      notes: programNotes,
+      sessionDate: programSessionDate,
+      sessionTime: programSessionTime,
+      timeZone: programTimeZone,
+      defaultTimeZone: defaultProgramTimeZone,
+      frequencyOptions: PROGRAM_FREQUENCY_OPTIONS,
+      frequency: programFrequency,
+      participants: programParticipants,
+      facilitators: programFacilitators,
+      includeCurrentUserFacilitator: includeCurrentUserAsFacilitator,
+      fieldErrors: programFieldErrors,
+      submissionError: programSubmissionError,
+      submissionSuccess: programSubmissionSuccess,
+      isSubmitting: isSubmittingProgram,
+    },
+    share: {
+      session: shareSession,
+      backButtonLabel: shareBackButtonLabel,
+      selectedSentenceIndexes,
+      activeTheme: activeShareTheme,
+      themes: shareThemes,
+      themeId: shareThemeId,
+      selectionLimit: SHARE_SELECTION_LIMIT,
+    },
+    settings: {
+      fontOptions,
+      fontScale,
+    },
+    profile: {
+      email: authenticatedUser?.email ?? authEmail ?? '',
+      memberRef:
+        typeof authenticatedUser?.memberRef === 'string'
+          ? authenticatedUser.memberRef
+          : typeof authenticatedUser?.userId === 'string'
+            ? authenticatedUser.userId
+            : '',
+      isAuthenticated: Boolean(authenticatedUser),
+    },
+    verses: {
+      items: myVerses,
+    },
+    handlers: {
+      startSignIn: handleStartSignIn,
+      continueAsGuest: handleContinueAsGuest,
+      changeEmail: setAuthEmail,
+      changePassword: setAuthPassword,
+      signIn: handleSignIn,
+      cancelSignIn: handleCancelSignIn,
+      readWritings: handleOpenCollections,
+      openPrayers: handleOpenPrayers,
+      chooseRandom: handleShowRandomPassage,
+      createDevotional: handleOpenProgram,
+      selectCollection: handleSelectCollection,
+      openCollections: handleOpenCollections,
+      selectWriting: handleSelectWriting,
+      openSettings: handleOpenSettings,
+      openProgram: handleOpenProgram,
+      showRandomPassage: handleShowRandomPassage,
+      closeSettings: handleCloseSettings,
+      selectFontScale: handleSelectFontScale,
+      logout: handleLogout,
+      toggleShareSentence: handleToggleShareSentence,
+      closeShare: handleCloseShare,
+      proceedToShareEdit: handleProceedToShareEdit,
+      selectShareTheme: handleSelectShareTheme,
+      shareNow: handleShareNow,
+      closeProgram: handleCloseProgram,
+      clearProgram: handleClearProgram,
+      submitProgram: handleSubmitProgram,
+      shareProgram: handleShareProgram,
+      removeFromProgram: handleRemoveFromProgram,
+      searchProgramTheme: searchSectionsByTheme,
+      addProgramSections: handleAddProgramSections,
+      changeProgramTitle: handleProgramTitleChange,
+      changeProgramNotes: handleProgramNotesChange,
+      changeProgramSessionDate: handleProgramSessionDateChange,
+      changeProgramSessionTime: handleProgramSessionTimeChange,
+      changeProgramTimeZone: handleProgramTimeZoneChange,
+      selectProgramFrequency: setProgramFrequency,
+      changeProgramParticipants: setProgramParticipants,
+      changeProgramFacilitators: setProgramFacilitators,
+      removeCurrentUserFacilitator: handleRemoveCurrentUserFacilitator,
+      restoreCurrentUserFacilitator: handleRestoreCurrentUserFacilitator,
+      backToHome: handleBackToHome,
+      backToSections: handleBackToSections,
+      selectSection: handleSelectSection,
+      addToProgram: handleAddToProgram,
+      addToMyVerses: handleAddToMyVerses,
+      sharePassage: handleOpenShare,
+      showAnotherPassage: handleShowRandomPassage,
+      continueSection: handleContinueRandomPassage,
+      openSearchResult: handleOpenSearchResult,
+      removeVerse: handleRemoveFromMyVerses,
+      goBack,
+    },
+  };
+
   return (
     <AppNavigationContainer
       navigationRef={navigationRef}
       onReady={handleNavigationReady}
       onStateChange={handleNavigationStateChange}
     >
-      <Stack.Navigator
-        initialRouteName="start"
-        screenOptions={stackScreenOptions}
-      >
-        <Stack.Screen name="start">
-          {() =>
-            renderScreenSurface(
-              <StartScreen
-                styles={styles}
-                displayName={displayName}
-                onStartSignIn={handleStartSignIn}
-                onContinueAsGuest={handleContinueAsGuest}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="signin">
-          {() =>
-            renderScreenSurface(
-              <SignInScreen
-                styles={styles}
-                authEmail={authEmail}
-                authPassword={authPassword}
-                authError={authError}
-                isAuthenticating={isAuthenticating}
-                onChangeEmail={setAuthEmail}
-                onChangePassword={setAuthPassword}
-                onSignIn={handleSignIn}
-                onCancel={handleCancelSignIn}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="explore">
-          {() =>
-            renderScreenSurface(
-              <ExploreScreen
-                styles={styles}
-                onReadWritings={handleOpenCollections}
-                onOpenPrayers={handleOpenPrayers}
-                onChooseRandom={handleShowRandomPassage}
-                onCreateDevotional={handleOpenProgram}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="collections">
-          {() =>
-            renderScreenSurface(
-              <WritingsCollectionScreen
-                styles={styles}
-                collections={collectionOptions}
-                onSelectCollection={handleSelectCollection}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="home">
-          {() =>
-            renderScreenSurface(
-              <LibraryScreen
-                styles={styles}
-                writings={scopedWritings}
-                collectionLabel={activeCollection?.label ?? null}
-                onOpenCollections={handleOpenCollections}
-                onSelectWriting={handleSelectWriting}
-                onOpenSettings={handleOpenSettings}
-                onOpenProgram={handleOpenProgram}
-                hasProgramPassages={hasProgramPassages}
-                programBadgeLabel={programBadgeLabel}
-                hasPassages={hasPassages}
-                onShowRandomPassage={handleShowRandomPassage}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="settings">
-          {() =>
-            renderScreenSurface(
-              <SettingsScreen
-                styles={styles}
-                scaledTypography={scaledTypography}
-                onClose={handleCloseSettings}
-                onOpenProgram={handleOpenProgram}
-                hasProgramPassages={hasProgramPassages}
-                programBadgeLabel={programBadgeLabel}
-                fontOptions={fontOptions}
-                fontScale={fontScale}
-                onSelectFontScale={handleSelectFontScale}
-                onLogout={handleLogout}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="shareSelect">
-          {() =>
-            renderScreenSurface(
-              shareSession ? (
-                <ShareSelectionScreen
-                  styles={styles}
-                  scaledTypography={scaledTypography}
-                  shareSession={shareSession}
-                  shareBackButtonLabel={shareBackButtonLabel}
-                  selectedSentenceIndexes={selectedSentenceIndexes}
-                  onToggleSentence={handleToggleShareSentence}
-                  onClose={handleCloseShare}
-                  onOpenProgram={handleOpenProgram}
-                  onNext={handleProceedToShareEdit}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                  maxSelections={SHARE_SELECTION_LIMIT}
-                />
-              ) : (
-                <UnavailableScreen
-                  styles={styles}
-                  onBack={handleBackToHome}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ),
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="shareEdit">
-          {() =>
-            renderScreenSurface(
-              shareSession ? (
-                <ShareEditorScreen
-                  styles={styles}
-                  scaledTypography={scaledTypography}
-                  shareSession={shareSession}
-                  shareBackButtonLabel={shareBackButtonLabel}
-                  selectedSentenceIndexes={selectedSentenceIndexes}
-                  onClose={handleCloseShare}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                  activeShareTheme={activeShareTheme}
-                  shareThemes={shareThemes}
-                  shareThemeId={shareThemeId}
-                  onSelectShareTheme={handleSelectShareTheme}
-                  onShareNow={handleShareNow}
-                />
-              ) : (
-                <UnavailableScreen
-                  styles={styles}
-                  onBack={handleBackToHome}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ),
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="program">
-          {() =>
-            renderScreenSurface(
-              <ProgramScreen
-                styles={styles}
-                scaledTypography={scaledTypography}
-                authenticatedUser={authenticatedUser}
-                programPassages={programPassages}
-                programBackButtonLabel={programBackButtonLabel}
-                hasProgramPassages={hasProgramPassages}
-                onClose={handleCloseProgram}
-                onClearProgram={handleClearProgram}
-                renderBlockContent={renderBlockContent}
-                programTitle={programTitle}
-                onChangeProgramTitle={handleProgramTitleChange}
-                programNotes={programNotes}
-                onChangeProgramNotes={handleProgramNotesChange}
-                programSessionDate={programSessionDate}
-                onChangeProgramSessionDate={handleProgramSessionDateChange}
-                programSessionTime={programSessionTime}
-                onChangeProgramSessionTime={handleProgramSessionTimeChange}
-                programTimeZone={programTimeZone}
-                onChangeProgramTimeZone={handleProgramTimeZoneChange}
-                defaultProgramTimeZone={defaultProgramTimeZone}
-                programFrequencyOptions={PROGRAM_FREQUENCY_OPTIONS}
-                programFrequency={programFrequency}
-                onSelectProgramFrequency={setProgramFrequency}
-                programParticipants={programParticipants}
-                onChangeProgramParticipants={setProgramParticipants}
-                programFacilitators={programFacilitators}
-                onChangeProgramFacilitators={setProgramFacilitators}
-                includeCurrentUserFacilitator={includeCurrentUserAsFacilitator}
-                onRemoveCurrentUserFacilitator={handleRemoveCurrentUserFacilitator}
-                onRestoreCurrentUserFacilitator={handleRestoreCurrentUserFacilitator}
-                programFieldErrors={programFieldErrors}
-                onShareProgram={handleShareProgram}
-                onSubmitProgram={handleSubmitProgram}
-                programSubmissionError={programSubmissionError}
-                programSubmissionSuccess={programSubmissionSuccess}
-                isSubmittingProgram={isSubmittingProgram}
-                onRemoveFromProgram={handleRemoveFromProgram}
-                onSearchProgramTheme={searchSectionsByTheme}
-                onAddProgramSections={handleAddProgramSections}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="writing">
-          {() =>
-            renderScreenSurface(
-              selectedWriting ? (
-                <WritingScreen
-                  styles={styles}
-                  scaledTypography={scaledTypography}
-                  selectedWriting={selectedWriting}
-                  writingSections={writingSections}
-                  onBack={handleBackToHome}
-                  onSelectSection={handleSelectSection}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ) : (
-                <UnavailableScreen
-                  styles={styles}
-                  onBack={handleBackToHome}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ),
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="section">
-          {() =>
-            renderScreenSurface(
-              selectedWriting && selectedSection ? (
-                <SectionScreen
-                  styles={styles}
-                  scaledTypography={scaledTypography}
-                  selectedWriting={selectedWriting}
-                  selectedSection={selectedSection}
-                  activeSearchHighlight={activeSearchHighlight}
-                  sectionBlockIndex={sectionBlockIndex}
-                  onBack={handleBackToSections}
-                  sectionPagerRef={sectionPagerRef}
-                  sectionPageWidth={sectionPageWidth}
-                  sectionViewabilityConfig={sectionViewabilityConfig}
-                  sectionViewableItemsChanged={sectionViewableItemsChanged}
-                  renderBlockContent={renderBlockContent}
-                  onAddToProgram={handleAddToProgram}
-                  onAddToMyVerses={handleAddToMyVerses}
-                  onShare={handleOpenShare}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ) : (
-                <UnavailableScreen
-                  styles={styles}
-                  onBack={handleBackToHome}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ),
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="passage">
-          {() =>
-            renderScreenSurface(
-              randomPassage ? (
-                <PassageScreen
-                  styles={styles}
-                  scaledTypography={scaledTypography}
-                  randomPassage={randomPassage}
-                  onBack={handleBackToHome}
-                  renderBlockContent={renderBlockContent}
-                  onAddToProgram={handleAddToProgram}
-                  onAddToMyVerses={handleAddToMyVerses}
-                  onShare={handleOpenShare}
-                  onShowAnother={handleShowRandomPassage}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                  onContinueSection={handleContinueRandomPassage}
-                />
-              ) : (
-                <UnavailableScreen
-                  styles={styles}
-                  onBack={handleBackToHome}
-                  onOpenProgram={handleOpenProgram}
-                  hasProgramPassages={hasProgramPassages}
-                  programBadgeLabel={programBadgeLabel}
-                />
-              ),
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="search">
-          {() =>
-            renderScreenSurface(
-              <SearchScreen
-                styles={styles}
-                scaledTypography={scaledTypography}
-                searchableSections={searchableSections}
-                onSelectSection={handleOpenSearchResult}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="profile">
-          {() =>
-            renderScreenSurface(
-              <ProfileScreen
-                styles={styles}
-                displayName={displayName}
-                email={authenticatedUser?.email ?? authEmail ?? ''}
-                memberRef={
-                  typeof authenticatedUser?.memberRef === 'string'
-                    ? authenticatedUser.memberRef
-                    : typeof authenticatedUser?.userId === 'string'
-                      ? authenticatedUser.userId
-                      : ''
-                }
-                isAuthenticated={Boolean(authenticatedUser)}
-              />,
-            )
-          }
-        </Stack.Screen>
-        <Stack.Screen name="myVerses">
-          {() =>
-            renderScreenSurface(
-              <MyVersesScreen
-                styles={styles}
-                scaledTypography={scaledTypography}
-                verses={myVerses}
-                renderBlockContent={renderBlockContent}
-                onRemoveVerse={handleRemoveFromMyVerses}
-              />,
-            )
-          }
-        </Stack.Screen>
-      </Stack.Navigator>
+      {isInAppFlow ? (
+        <AppNavigator
+          key="app"
+          renderScreenSurface={renderScreenSurface}
+          screenState={screenState}
+        />
+      ) : (
+        <AuthNavigator
+          key="auth"
+          renderScreenSurface={renderScreenSurface}
+          screenState={screenState}
+        />
+      )}
     </AppNavigationContainer>
   );
 }

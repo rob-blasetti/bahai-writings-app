@@ -290,8 +290,24 @@ export default function SectionScreen({
           styles={styles}
           onBack={onBack}
           backAccessibilityLabel="Back to sections"
-          title={selectedWriting.title}
-          titleStyle={styles.topBarTitleSmall}
+          title={
+            <View style={styles.topBarTitleStack}>
+              <Text
+                style={styles.topBarTitlePrimary}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedWriting.title}
+              </Text>
+              <Text
+                style={styles.topBarTitleSecondary}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {selectedSection.title}
+              </Text>
+            </View>
+          }
           containerStyle={styles.sectionHeaderTopRow}
           rightAccessory={
             <ProgramIconButton
@@ -302,14 +318,6 @@ export default function SectionScreen({
             />
           }
         />
-        <Text
-          style={[
-            styles.sectionDetailTitle,
-            scaledTypography.sectionDetailTitle,
-          ]}
-        >
-          {selectedSection.title}
-        </Text>
       </View>
       {selectedSection.blocks.length === 0 ? (
         <Text

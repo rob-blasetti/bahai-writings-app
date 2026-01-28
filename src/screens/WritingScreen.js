@@ -9,6 +9,7 @@ export default function WritingScreen({
   scaledTypography,
   selectedWriting,
   writingSections,
+  collectionLabel,
   onBack,
   onSelectSection,
   onOpenProgram,
@@ -54,8 +55,24 @@ export default function WritingScreen({
         styles={styles}
         onBack={onBack}
         backAccessibilityLabel="Back to library"
-        title={selectedWriting.title}
-        titleStyle={styles.topBarTitleSmall}
+        title={
+          <View style={styles.topBarTitleStack}>
+            <Text
+              style={styles.topBarTitlePrimary}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {collectionLabel ?? "Baha'i Writings"}
+            </Text>
+            <Text
+              style={styles.topBarTitleSecondary}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {selectedWriting.title}
+            </Text>
+          </View>
+        }
       />
       <Text
         style={[
