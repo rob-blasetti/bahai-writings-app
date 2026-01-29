@@ -11,6 +11,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import writingsManifest from '../../assets/generated/writings.json';
 import ReflectionModal from '../components/ReflectionModal';
 import BaseScreen from '../components/BaseScreen';
+import ToastNotification from '../components/ToastNotification';
 import {
   AppNavigationContainer,
   AppNavigator,
@@ -41,15 +42,19 @@ import { appStyles } from '../styles/components';
 const styles = appStyles;
 const SHARE_SELECTION_LIMIT = 2;
 const SEARCH_HIGHLIGHT_DURATION_MS = 2500;
+const TOAST_DURATION_MS = 2000;
 const sectionPagerRef = { current: null };
 const pendingSectionBlockIndexRef = { current: null };
 const searchHighlightTimeoutRef = { current: null };
+const toastTimeoutRef = { current: null };
 const sectionViewabilityConfig = {
   viewAreaCoveragePercentThreshold: 60,
 };
 
 function AppContent() {
   const safeAreaInsets = useSafeAreaInsets();
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastVisible, setToastVisible] = useState(false);
   const writings = useMemo(
     () => (writingsManifest?.items ?? []).filter(item => item.text?.length),
     [],
@@ -281,10 +286,32 @@ function AppContent() {
     const nextIndex = viewableItems[0].index ?? 0;
     pendingSectionBlockIndexRef.current = nextIndex;
   };
+
+  const showToast = useCallback(message => {
+    if (!message) {
+      return;
+    }
+    setToastMessage(message);
+    setToastVisible(true);
+    if (toastTimeoutRef.current) {
+      clearTimeout(toastTimeoutRef.current);
+    }
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastVisible(false);
+    }, TOAST_DURATION_MS);
+  }, []);
+
   useEffect(() => {
     return () => {
       if (searchHighlightTimeoutRef.current) {
         clearTimeout(searchHighlightTimeoutRef.current);
+      }
+    };
+  }, []);
+  useEffect(() => {
+    return () => {
+      if (toastTimeoutRef.current) {
+        clearTimeout(toastTimeoutRef.current);
       }
     };
   }, []);
@@ -877,6 +904,24 @@ function AppContent() {
     sectionId,
     sectionTitle,
   }) => {
+    const blockId = block?.id;
+    if (!blockId) {
+      return;
+    }
+
+    const existingItem = programPassages.find(
+      item =>
+        item?.block?.id === blockId &&
+        (item.writingId ?? '') === (writingId ?? '') &&
+        (item.sectionId ?? '') === (sectionId ?? ''),
+    );
+
+    if (existingItem) {
+      removeProgramItem(existingItem.id);
+      showToast('Removed from Devotional Program');
+      return;
+    }
+
     const programItem = createProgramItemFromBlock({
       block,
       writingId,
@@ -889,11 +934,41 @@ function AppContent() {
       return;
     }
 
-    addProgramItems([programItem]);
+    const additions = addProgramItems([programItem]);
+    if (additions > 0) {
+      showToast('Added to Devotional Program');
+    } else {
+      showToast('Already in Devotional Program');
+    }
   };
 
   const handleAddToMyVerses = payload => {
-    addVerseFromBlock(payload);
+    const blockId = payload?.block?.id;
+    if (!blockId) {
+      return;
+    }
+
+    const writingId = payload?.writingId ?? '';
+    const sectionId = payload?.sectionId ?? '';
+    const existingVerse = (Array.isArray(myVerses) ? myVerses : []).find(
+      item =>
+        item?.block?.id === blockId &&
+        (item.writingId ?? '') === writingId &&
+        (item.sectionId ?? '') === sectionId,
+    );
+
+    if (existingVerse) {
+      removeVerse(existingVerse.id);
+      showToast('Removed from My Verses');
+      return;
+    }
+
+    const additions = addVerseFromBlock(payload);
+    if (additions > 0) {
+      showToast('Added to My Verses');
+    } else {
+      showToast('Already in My Verses');
+    }
   };
 
   const handleAddProgramSections = useCallback(
@@ -1048,6 +1123,8 @@ function AppContent() {
   });
 
   const displayName = authenticatedUser?.name ?? 'Kali';
+  const toastBottomOffset =
+    (safeAreaInsets.bottom ?? 0) + (isInAppFlow ? 72 : 16);
 
   if (!hasHydratedAuth) {
     return (
@@ -1065,6 +1142,12 @@ function AppContent() {
   const renderScreenSurface = child => (
     <View style={styles.container}>
       <View style={styles.screenContentWrapper}>{child}</View>
+      <ToastNotification
+        styles={styles}
+        message={toastMessage}
+        visible={toastVisible}
+        bottomOffset={toastBottomOffset}
+      />
       <ReflectionModal
         visible={isReflectionModalVisible}
         styles={styles}

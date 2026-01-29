@@ -17,6 +17,8 @@ export default function PassageScreen({
   styles,
   scaledTypography,
   randomPassage,
+  programPassages,
+  myVerses,
   onBack,
   renderBlockContent,
   onAddToProgram,
@@ -28,6 +30,29 @@ export default function PassageScreen({
   programBadgeLabel,
   onContinueSection,
 }) {
+  const programKeySet = useMemo(() => {
+    const items = Array.isArray(programPassages) ? programPassages : [];
+    return new Set(
+      items.map(
+        item =>
+          `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+            item.sectionId ?? ''
+          }`,
+      ),
+    );
+  }, [programPassages]);
+  const verseKeySet = useMemo(() => {
+    const items = Array.isArray(myVerses) ? myVerses : [];
+    return new Set(
+      items.map(
+        item =>
+          `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+            item.sectionId ?? ''
+          }`,
+      ),
+    );
+  }, [myVerses]);
+
   const panResponder = useMemo(
     () =>
       PanResponder.create({
@@ -56,6 +81,12 @@ export default function PassageScreen({
   if (!randomPassage) {
     return null;
   }
+
+  const passageKey = `${randomPassage.block?.id ?? ''}::${
+    randomPassage.writingId ?? ''
+  }::${randomPassage.sectionId ?? ''}`;
+  const isInProgram = programKeySet.has(passageKey);
+  const isInMyVerses = verseKeySet.has(passageKey);
 
   return (
     <BaseScreen
@@ -118,7 +149,11 @@ export default function PassageScreen({
                 }
                 style={[styles.shareActionChip, styles.chipInRow]}
               >
-                <Ionicons name="book-outline" size={20} color="#3b2a15" />
+                <Ionicons
+                  name={isInProgram ? 'book' : 'book-outline'}
+                  size={20}
+                  color="#3b2a15"
+                />
               </TouchableOpacity>
               <TouchableOpacity
                 accessibilityLabel="Share this passage"
@@ -151,7 +186,11 @@ export default function PassageScreen({
                   styles.chipSpacing,
                 ]}
               >
-                <Ionicons name="heart-outline" size={20} color="#3b2a15" />
+                <Ionicons
+                  name={isInMyVerses ? 'heart' : 'heart-outline'}
+                  size={20}
+                  color="#3b2a15"
+                />
               </TouchableOpacity>
             </View>
           </View>

@@ -13,6 +13,8 @@ export default function SectionScreen({
   selectedWriting,
   selectedSection,
   activeSearchHighlight,
+  programPassages,
+  myVerses,
   onBack,
   sectionPagerRef,
   sectionPageWidth,
@@ -26,6 +28,29 @@ export default function SectionScreen({
   hasProgramPassages,
   programBadgeLabel,
 }) {
+  const programKeySet = useMemo(() => {
+    const items = Array.isArray(programPassages) ? programPassages : [];
+    return new Set(
+      items.map(
+        item =>
+          `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+            item.sectionId ?? ''
+          }`,
+      ),
+    );
+  }, [programPassages]);
+  const verseKeySet = useMemo(() => {
+    const items = Array.isArray(myVerses) ? myVerses : [];
+    return new Set(
+      items.map(
+        item =>
+          `${item.block?.id ?? ''}::${item.writingId ?? ''}::${
+            item.sectionId ?? ''
+          }`,
+      ),
+    );
+  }, [myVerses]);
+
   const blockScrollRefs = useRef({});
   const blockScrollMetrics = useRef({});
   const highlightCenterRequestRef = useRef(null);
@@ -146,6 +171,11 @@ export default function SectionScreen({
         selectedSection?.blocks?.length > 0
           ? `Passage ${index + 1} of ${selectedSection.blocks.length}`
           : null;
+      const passageKey = `${item?.id ?? ''}::${selectedWriting?.id ?? ''}::${
+        selectedSection?.id ?? ''
+      }`;
+      const isInProgram = programKeySet.has(passageKey);
+      const isInMyVerses = verseKeySet.has(passageKey);
 
       return (
         <View style={[styles.sectionPagerItem, { width: sectionPageWidth }]}>
@@ -212,7 +242,11 @@ export default function SectionScreen({
                     }
                     style={[styles.shareActionChip, styles.chipInRow]}
                   >
-                    <Ionicons name="book-outline" size={20} color="#3b2a15" />
+                    <Ionicons
+                      name={isInProgram ? 'book' : 'book-outline'}
+                      size={20}
+                      color="#3b2a15"
+                    />
                   </TouchableOpacity>
                   <TouchableOpacity
                     accessibilityLabel="Share this passage"
@@ -249,7 +283,11 @@ export default function SectionScreen({
                       styles.chipSpacing,
                     ]}
                   >
-                    <Ionicons name="heart-outline" size={20} color="#3b2a15" />
+                    <Ionicons
+                      name={isInMyVerses ? 'heart' : 'heart-outline'}
+                      size={20}
+                      color="#3b2a15"
+                    />
                   </TouchableOpacity>
                 </View>
               </View>
@@ -282,7 +320,6 @@ export default function SectionScreen({
     <BaseScreen
       styles={styles}
       variant="plain"
-      style={styles.homeContainer}
       topNav={{
         title: (
           <View style={styles.topBarTitleStack}>
@@ -291,14 +328,14 @@ export default function SectionScreen({
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {selectedWriting.title}
+              {selectedSection.title}
             </Text>
             <Text
               style={styles.topBarTitleSecondary}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {selectedSection.title}
+              {selectedWriting.title}
             </Text>
           </View>
         ),

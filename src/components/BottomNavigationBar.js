@@ -12,6 +12,12 @@ const TABS = [
     icon: 'bookmark-outline',
     activeIcon: 'bookmark',
   },
+  {
+    key: 'settings',
+    label: 'Settings',
+    icon: 'settings-outline',
+    activeIcon: 'settings',
+  },
 ];
 
 export function BottomNavigationBar({

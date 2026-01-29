@@ -56,14 +56,14 @@ export default function WritingScreen({
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {collectionLabel ?? "Baha'i Writings"}
+              {selectedWriting.title}
             </Text>
             <Text
               style={styles.topBarTitleSecondary}
               numberOfLines={1}
               ellipsizeMode="tail"
             >
-              {selectedWriting.title}
+              {collectionLabel ?? "Baha'i Writings"}
             </Text>
           </View>
         ),

@@ -7,6 +7,12 @@ export const appStyles = StyleSheet.create({
   screenContentWrapper: {
     flex: 1,
   },
+  webViewLoading: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#ffffff',
+  },
   bottomNavScreen: {
     flex: 1,
     paddingHorizontal: 24,
@@ -149,7 +155,8 @@ export const appStyles = StyleSheet.create({
   homeContainer: {
     flex: 1,
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    paddingTop: 20,
+    paddingBottom: 0,
   },
   tabScreenTitleWrapper: {
     marginBottom: 12,
@@ -412,9 +419,34 @@ export const appStyles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingHorizontal: 56,
+    paddingHorizontal: 72,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  toastContainer: {
+    position: 'absolute',
+    left: 16,
+    right: 16,
+    alignItems: 'center',
+    zIndex: 10,
+  },
+  toastCard: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#3b2a15',
+    backgroundColor: '#2c1f0c',
+    shadowColor: '#000000',
+    shadowOpacity: 0.18,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 4,
+  },
+  toastLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fffdf8',
   },
   topBarTitle: {
     fontSize: 17,
@@ -583,7 +615,7 @@ export const appStyles = StyleSheet.create({
     borderRadius: 14,
     borderWidth: 1,
     borderColor: '#d7c5a8',
-    backgroundColor: '#f7f0e3',
+    backgroundColor: '#ffffff',
     marginBottom: 12,
   },
   sectionRowTitle: {
@@ -1394,6 +1426,9 @@ export const appStyles = StyleSheet.create({
   settingsGroup: {
     marginTop: 16,
   },
+  settingsScrollContent: {
+    paddingBottom: 24,
+  },
   settingsGroupLabel: {
     fontSize: 14,
     fontWeight: '600',
@@ -1440,6 +1475,17 @@ export const appStyles = StyleSheet.create({
     fontSize: 14,
     color: '#6f5a35',
     marginTop: 6,
+  },
+  settingsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  settingsRowIcon: {
+    marginLeft: 12,
+  },
+  settingsRowLabelDestructive: {
+    color: '#b0302a',
   },
   sharePreviewScroll: {
     flex: 1,

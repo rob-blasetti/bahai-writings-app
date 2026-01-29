@@ -6,6 +6,7 @@ import MyVersesScreen from '../screens/MyVersesScreen';
 import WritingsCollectionScreen from '../screens/WritingsCollectionScreen';
 import LibraryScreen from '../screens/LibraryScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import WebScreen from '../screens/WebScreen';
 import ShareSelectionScreen from '../screens/ShareSelectionScreen';
 import ShareEditorScreen from '../screens/ShareEditorScreen';
 import ProgramScreen from '../screens/ProgramScreen';
@@ -30,7 +31,6 @@ export default function TabStackNavigator({
     content,
     program,
     share,
-    settings,
     profile,
     verses,
     handlers,
@@ -89,7 +89,6 @@ export default function TabStackNavigator({
     selectionLimit: shareSelectionLimit = 2,
   } = share;
 
-  const { fontOptions, fontScale } = settings;
   const { email: profileEmail, memberRef, isAuthenticated } = profile;
   const { items: myVerses } = verses;
 
@@ -135,7 +134,6 @@ export default function TabStackNavigator({
     openSearchResult,
     removeVerse,
     openVerse,
-    selectFontScale,
     logout,
   } = handlers;
 
@@ -171,6 +169,15 @@ export default function TabStackNavigator({
           verses={myVerses}
           onRemoveVerse={removeVerse}
           onOpenVerse={openVerse}
+        />
+      );
+    }
+
+    if (tabKey === 'settings') {
+      return (
+        <SettingsScreen
+          styles={styles}
+          onLogout={logout}
         />
       );
     }
@@ -218,22 +225,20 @@ export default function TabStackNavigator({
           )
         }
       </Stack.Screen>
-      <Stack.Screen name="settings">
-        {() =>
-          renderScreenSurface(
-            <SettingsScreen
-              styles={styles}
-              scaledTypography={scaledTypography}
-              onOpenProgram={openProgram}
-              hasProgramPassages={hasProgramPassages}
-              programBadgeLabel={programBadgeLabel}
-              fontOptions={fontOptions}
-              fontScale={fontScale}
-              onSelectFontScale={selectFontScale}
-              onLogout={logout}
-            />,
-          )
-        }
+      {tabKey !== 'settings' ? (
+        <Stack.Screen name="settings">
+          {() =>
+            renderScreenSurface(
+              <SettingsScreen
+                styles={styles}
+                onLogout={logout}
+              />,
+            )
+          }
+        </Stack.Screen>
+      ) : null}
+      <Stack.Screen name="web">
+        {() => renderScreenSurface(<WebScreen styles={styles} />)}
       </Stack.Screen>
       <Stack.Screen name="shareSelect">
         {() =>
@@ -372,6 +377,8 @@ export default function TabStackNavigator({
                 selectedWriting={selectedWriting}
                 selectedSection={selectedSection}
                 activeSearchHighlight={activeSearchHighlight}
+                programPassages={programPassages}
+                myVerses={myVerses}
                 onBack={backToSections}
                 sectionPagerRef={sectionPagerRef}
                 sectionPageWidth={sectionPageWidth}
@@ -405,6 +412,8 @@ export default function TabStackNavigator({
                 styles={styles}
                 scaledTypography={scaledTypography}
                 randomPassage={randomPassage}
+                programPassages={programPassages}
+                myVerses={myVerses}
                 onBack={backToHome}
                 renderBlockContent={renderBlockContent}
                 onAddToProgram={addToProgram}
