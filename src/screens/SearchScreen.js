@@ -136,7 +136,7 @@ export default function SearchScreen({
   const hasResults = results.length > 0;
 
   return (
-    <BaseScreen styles={styles}>
+    <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
       <TextInput
         value={query}
         onChangeText={setQuery}

@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, Text, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
 import Card from '../components/Card';
 
@@ -11,13 +11,12 @@ export default function WritingsCollectionScreen({
   onSelectCollection,
 }) {
   return (
-    <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
-      <View style={styles.homeHeader}>
-        <Text style={styles.sectionTitle}>Choose Writings</Text>
-        <Text style={styles.homeHeaderSubtitle}>
-          Select a collection to explore the library.
-        </Text>
-      </View>
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{ title: 'Read The Writings', backAccessibilityLabel: 'Back' }}
+    >
       <ScrollView
         style={styles.homeList}
         contentContainerStyle={[styles.homeListContent, styles.cardGrid]}

@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import TopNav from './TopNav';
 
 const TABLET_MIN_SIZE = 768;
 const MAX_CONTENT_WIDTH = 960;
@@ -15,6 +16,7 @@ export default function BaseScreen({
   containerStyle,
   maxWidth: maxWidthOverride,
   includeBottomInset = false,
+  topNav,
   ...rest
 }) {
   const { width, height } = useWindowDimensions();
@@ -32,6 +34,10 @@ export default function BaseScreen({
   const appBackgroundColor = styles?.container?.backgroundColor ?? APP_BACKGROUND;
   const surfaceBackgroundColor =
     styles?.screenSurface?.backgroundColor ?? SURFACE_BACKGROUND;
+
+  const resolvedTopNav = topNav === true ? {} : topNav;
+  const showTopNav =
+    Boolean(resolvedTopNav) && resolvedTopNav?.show !== false;
 
   const baseSurfaceStyle = useMemo(() => {
     const shouldUseSurface = variant !== 'plain';
@@ -76,6 +82,7 @@ export default function BaseScreen({
       ]}
     >
       <View style={baseSurfaceStyle} {...rest}>
+        {showTopNav ? <TopNav styles={styles} {...resolvedTopNav} /> : null}
         {children}
       </View>
     </View>

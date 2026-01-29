@@ -1,27 +1,11 @@
-import React, { useCallback } from 'react';
+import React from 'react';
 import StartScreen from '../screens/StartScreen';
 import SignInScreen from '../screens/SignInScreen';
 import { Stack } from './StackNavigator';
-import { isBottomTabRoute } from './BottomTabs';
+import { getStackScreenOptions } from './stackOptions';
 
 export default function AuthNavigator({ renderScreenSurface, screenState }) {
-  const stackScreenOptions = useCallback(({ route }) => {
-    const isBottomTabScreen = isBottomTabRoute(route.name);
-    if (isBottomTabScreen) {
-      return {
-        headerShown: false,
-        gestureEnabled: false,
-        fullScreenGestureEnabled: false,
-        animation: 'none',
-      };
-    }
-    return {
-      headerShown: false,
-      gestureEnabled: true,
-      fullScreenGestureEnabled: true,
-      animation: 'slide_from_right',
-    };
-  }, []);
+  const stackScreenOptions = getStackScreenOptions;
 
   const { styles, displayName, auth, handlers } = screenState;
   const {

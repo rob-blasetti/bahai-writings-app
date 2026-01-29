@@ -23,7 +23,6 @@ import {
   extractPassageSentences,
   getShareableBlockText,
 } from '../sharing/shareUtils';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import BaseScreen from '../components/BaseScreen';
 
 const getThemeChipStyle = (theme, isActive) => ({
@@ -795,13 +794,16 @@ export default function ShareEditorScreen({
   );
 
   return (
-    <BaseScreen styles={styles}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onClose}
-        backAccessibilityLabel={shareBackButtonLabel}
-        title="Share"
-      />
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{
+        title: 'Share',
+        backAccessibilityLabel: shareBackButtonLabel,
+        onBack: onClose,
+      }}
+    >
       <View style={styles.shareEditorBody}>
         <ScrollView
           style={styles.sharePreviewScroll}

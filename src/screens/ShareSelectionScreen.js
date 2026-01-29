@@ -1,6 +1,5 @@
 import React, { Fragment, useMemo } from 'react';
 import { ScrollView, Text, TouchableOpacity, View } from 'react-native';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import BaseScreen from '../components/BaseScreen';
 import {
   extractPassageSentences,
@@ -42,12 +41,12 @@ export default function ShareSelectionScreen({
   const selectionLimitReached = selectionCount >= maxSelections;
 
   return (
-    <BaseScreen styles={styles}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onClose}
-        backAccessibilityLabel={shareBackButtonLabel}
-      />
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{ backAccessibilityLabel: shareBackButtonLabel, onBack: onClose }}
+    >
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Choose what to share
       </Text>

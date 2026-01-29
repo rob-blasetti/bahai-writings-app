@@ -1,30 +1,12 @@
 import React, { useCallback } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import ExploreScreen from '../screens/ExploreScreen';
-import SearchScreen from '../screens/SearchScreen';
-import ProfileScreen from '../screens/ProfileScreen';
-import MyVersesScreen from '../screens/MyVersesScreen';
 import { BottomNavigationBar } from '../components/BottomNavigationBar';
+import { BOTTOM_TAB_KEYS } from './BottomTabs';
+import TabStackNavigator from './TabStackNavigator';
 
 const Tab = createBottomTabNavigator();
 
 export default function BottomTabNavigator({ renderScreenSurface, screenState }) {
-  const { styles, scaledTypography, displayName, content, profile, verses, handlers } =
-    screenState;
-
-  const { searchableSections, renderBlockContent } = content;
-  const { email: profileEmail, memberRef, isAuthenticated } = profile;
-  const { items: myVerses } = verses;
-
-  const {
-    readWritings,
-    openPrayers,
-    chooseRandom,
-    createDevotional,
-    openSearchResult,
-    removeVerse,
-  } = handlers;
-
   const tabBar = useCallback(
     ({ state, navigation, insets }) => {
       const activeTab = state.routeNames[state.index];
@@ -54,57 +36,17 @@ export default function BottomTabNavigator({ renderScreenSurface, screenState })
 
   return (
     <Tab.Navigator screenOptions={{ headerShown: false }} tabBar={tabBar}>
-      <Tab.Screen name="explore">
-        {() =>
-          renderScreenSurface(
-            <ExploreScreen
-              styles={styles}
-              onReadWritings={readWritings}
-              onOpenPrayers={openPrayers}
-              onChooseRandom={chooseRandom}
-              onCreateDevotional={createDevotional}
-            />,
-          )
-        }
-      </Tab.Screen>
-      <Tab.Screen name="search">
-        {() =>
-          renderScreenSurface(
-            <SearchScreen
-              styles={styles}
-              scaledTypography={scaledTypography}
-              searchableSections={searchableSections}
-              onSelectSection={openSearchResult}
-            />,
-          )
-        }
-      </Tab.Screen>
-      <Tab.Screen name="profile">
-        {() =>
-          renderScreenSurface(
-            <ProfileScreen
-              styles={styles}
-              displayName={displayName}
-              email={profileEmail}
-              memberRef={memberRef}
-              isAuthenticated={isAuthenticated}
-            />,
-          )
-        }
-      </Tab.Screen>
-      <Tab.Screen name="myVerses">
-        {() =>
-          renderScreenSurface(
-            <MyVersesScreen
-              styles={styles}
-              scaledTypography={scaledTypography}
-              verses={myVerses}
-              renderBlockContent={renderBlockContent}
-              onRemoveVerse={removeVerse}
-            />,
-          )
-        }
-      </Tab.Screen>
+      {BOTTOM_TAB_KEYS.map(tabKey => (
+        <Tab.Screen key={tabKey} name={tabKey}>
+          {() => (
+            <TabStackNavigator
+              tabKey={tabKey}
+              renderScreenSurface={renderScreenSurface}
+              screenState={screenState}
+            />
+          )}
+        </Tab.Screen>
+      ))}
     </Tab.Navigator>
   );
 }

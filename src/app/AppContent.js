@@ -156,7 +156,6 @@ function AppContent() {
   const [selectedSectionId, setSelectedSectionId] = useState(null);
   const [randomPassage, setRandomPassage] = useState(null);
   const [activeSearchHighlight, setActiveSearchHighlight] = useState(null);
-  const [sectionBlockIndex, setSectionBlockIndex] = useState(0);
   const [fontScale, setFontScale] = useState(1);
   const fontOptions = useMemo(
     () => [
@@ -280,7 +279,7 @@ function AppContent() {
       return;
     }
     const nextIndex = viewableItems[0].index ?? 0;
-    setSectionBlockIndex(nextIndex);
+    pendingSectionBlockIndexRef.current = nextIndex;
   };
   useEffect(() => {
     return () => {
@@ -391,7 +390,6 @@ function AppContent() {
       if (!sectionPagerRef.current) {
         return false;
       }
-      setSectionBlockIndex(nextIndex);
       sectionPagerRef.current.scrollToOffset({
         offset: sectionPageWidth * nextIndex,
         animated: false,
@@ -508,7 +506,6 @@ function AppContent() {
 
       if (isAlreadyViewingSection && sectionPagerRef.current) {
         pendingSectionBlockIndexRef.current = null;
-        setSectionBlockIndex(normalizedBlockIndex);
         sectionPagerRef.current.scrollToOffset({
           offset: sectionPageWidth * normalizedBlockIndex,
           animated: true,
@@ -649,6 +646,7 @@ function AppContent() {
   const handleOpenPrayers = () => {
     handleSelectCollection('prayers');
   };
+
 
   const handleStartSignIn = () => {
     setAuthError(null);
@@ -887,9 +885,8 @@ function AppContent() {
   };
 
   const handleCloseProgram = () => {
-    const nextScreen = programReturnScreen ?? 'home';
     setProgramReturnScreen(null);
-    navigateToScreen(nextScreen);
+    goBack();
   };
 
   const handleRemoveFromProgram = itemId => {
@@ -979,10 +976,6 @@ function AppContent() {
     navigateToScreen('settings');
   };
 
-  const handleCloseSettings = () => {
-    goBack();
-  };
-
   const handleLogout = useCallback(async () => {
     await logout();
     setActiveCollectionKey(null);
@@ -1013,7 +1006,6 @@ function AppContent() {
     [selectedSectionId, writingSections],
   );
 
-  const hasPassages = availablePassages.length > 0;
   const programBadgeLabel = programCount > 9 ? '9+' : `${programCount}`;
   const isReflectionModalVisible = Boolean(reflectionModalContext);
   const renderBlockContent = useBlockRenderer({
@@ -1076,13 +1068,11 @@ function AppContent() {
       randomPassage,
       searchableSections,
       activeSearchHighlight,
-      sectionBlockIndex,
       sectionPagerRef,
       sectionPageWidth,
       sectionViewabilityConfig,
       sectionViewableItemsChanged,
       renderBlockContent,
-      hasPassages,
     },
     program: {
       passages: programPassages,
@@ -1147,8 +1137,6 @@ function AppContent() {
       selectWriting: handleSelectWriting,
       openSettings: handleOpenSettings,
       openProgram: handleOpenProgram,
-      showRandomPassage: handleShowRandomPassage,
-      closeSettings: handleCloseSettings,
       selectFontScale: handleSelectFontScale,
       logout: handleLogout,
       toggleShareSentence: handleToggleShareSentence,
@@ -1183,7 +1171,6 @@ function AppContent() {
       continueSection: handleContinueRandomPassage,
       openSearchResult: handleOpenSearchResult,
       removeVerse: handleRemoveFromMyVerses,
-      goBack,
     },
   };
 

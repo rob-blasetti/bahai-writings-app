@@ -1,13 +1,11 @@
 import React from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
 import { ProgramIconButton } from '../components/IconButtons';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import BaseScreen from '../components/BaseScreen';
 
 export default function SettingsScreen({
   styles,
   scaledTypography,
-  onClose,
   onOpenProgram,
   hasProgramPassages,
   programBadgeLabel,
@@ -17,20 +15,20 @@ export default function SettingsScreen({
   onLogout,
 }) {
   return (
-    <BaseScreen styles={styles}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onClose}
-        backAccessibilityLabel="Back to library"
-        rightAccessory={
+    <BaseScreen
+      styles={styles}
+      topNav={{
+        backAccessibilityLabel: 'Back',
+        rightAccessory: (
           <ProgramIconButton
             styles={styles}
             hasProgramPassages={hasProgramPassages}
             programBadgeLabel={programBadgeLabel}
             onPress={onOpenProgram}
           />
-        }
-      />
+        ),
+      }}
+    >
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Settings
       </Text>

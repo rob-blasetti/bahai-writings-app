@@ -8,7 +8,6 @@ import {
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import Passage from '../components/Passage';
 import BaseScreen from '../components/BaseScreen';
 
@@ -59,21 +58,25 @@ export default function PassageScreen({
   }
 
   return (
-    <BaseScreen styles={styles} {...panResponder.panHandlers}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onBack}
-        backAccessibilityLabel="Back"
-        title="Daily Passage"
-        rightAccessory={
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{
+        title: 'Choose At Random',
+        backAccessibilityLabel: 'Back',
+        rightAccessory: (
           <ProgramIconButton
             styles={styles}
             hasProgramPassages={hasProgramPassages}
             programBadgeLabel={programBadgeLabel}
             onPress={onOpenProgram}
           />
-        }
-      />
+        ),
+        onBack,
+      }}
+      {...panResponder.panHandlers}
+    >
       <ScrollView contentContainerStyle={styles.contentScroll}>
         <View style={styles.passageMeta}>
           <Text style={styles.passageMetaLabel}>From</Text>

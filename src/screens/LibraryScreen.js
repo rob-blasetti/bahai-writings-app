@@ -2,20 +2,13 @@ import React, { useCallback } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
 import { SettingsIconButton } from '../components/IconButtons';
 import BaseScreen from '../components/BaseScreen';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 
 export default function LibraryScreen({
   styles,
   writings,
   collectionLabel,
-  onBack,
   onSelectWriting,
   onOpenSettings,
-  onOpenProgram,
-  hasProgramPassages,
-  programBadgeLabel,
-  hasPassages,
-  onShowRandomPassage,
 }) {
   const renderWritingItem = useCallback(
     ({ item }) => (
@@ -40,17 +33,19 @@ export default function LibraryScreen({
   );
 
   return (
-    <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onBack}
-        backAccessibilityLabel="Back to collections"
-        title={collectionLabel ?? "Baha'i Writings"}
-        titleStyle={styles.topBarTitleSmall}
-        rightAccessory={
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{
+        title: collectionLabel ?? "Baha'i Writings",
+        titleStyle: styles.topBarTitleSmall,
+        backAccessibilityLabel: 'Back',
+        rightAccessory: (
           <SettingsIconButton styles={styles} onPress={onOpenSettings} />
-        }
-      />
+        ),
+      }}
+    >
       <FlatList
         data={writings}
         keyExtractor={item => item.id}

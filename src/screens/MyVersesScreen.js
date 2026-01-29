@@ -71,7 +71,11 @@ export default function MyVersesScreen({
 
   if (!hasVerses) {
     return (
-      <BaseScreen styles={styles} variant="plain" style={styles.bottomNavScreen}>
+      <BaseScreen
+        styles={styles}
+        variant="plain"
+        style={styles.bottomNavScreen}
+      >
         <Text style={styles.bottomNavScreenTitle}>My Verses</Text>
         <Text style={styles.bottomNavScreenSubtitle}>
           Save passages from sections or the daily passage and they will appear
@@ -82,7 +86,7 @@ export default function MyVersesScreen({
   }
 
   return (
-    <BaseScreen styles={styles}>
+    <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         My Verses
       </Text>

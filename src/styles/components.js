@@ -293,19 +293,25 @@ export const appStyles = StyleSheet.create({
     right: 10,
     bottom: 10,
   },
-  cardText: {
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+  cardTintOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
+  },
+  cardTextOverlay: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 12,
   },
   cardTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#2c1f0c',
+    color: '#ffffff',
   },
   cardSubtitle: {
     marginTop: 6,
     fontSize: 14,
-    color: '#6f5a35',
+    color: '#ffffff',
     lineHeight: 20,
   },
   chip: {

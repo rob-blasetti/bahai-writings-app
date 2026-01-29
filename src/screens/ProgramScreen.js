@@ -13,7 +13,6 @@ import {
 import DateTimePicker, {
   DateTimePickerAndroid,
 } from '@react-native-community/datetimepicker';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import Passage from '../components/Passage';
 import BaseScreen from '../components/BaseScreen';
 
@@ -978,7 +977,24 @@ export default function ProgramScreen({
     : null;
 
   return (
-    <BaseScreen styles={styles}>
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{
+        title: 'Create Devotional',
+        backAccessibilityLabel: programBackButtonLabel,
+        rightAccessory: hasProgramPassages ? (
+          <TouchableOpacity
+            onPress={onClearProgram}
+            style={styles.programClearButton}
+          >
+            <Text style={styles.programClearLabel}>Clear all</Text>
+          </TouchableOpacity>
+        ) : null,
+        onBack: onClose,
+      }}
+    >
       <ProgramThemeModal
         styles={styles}
         visible={isThemeModalVisible}
@@ -992,21 +1008,6 @@ export default function ProgramScreen({
         selectedSectionIds={selectedThemeSectionIds}
         onToggleSection={handleToggleThemeSection}
         onAddSelected={handleAddSelectedSections}
-      />
-      <NavigationTopBar
-        styles={styles}
-        onBack={onClose}
-        backAccessibilityLabel={programBackButtonLabel}
-        rightAccessory={
-          hasProgramPassages ? (
-            <TouchableOpacity
-              onPress={onClearProgram}
-              style={styles.programClearButton}
-            >
-              <Text style={styles.programClearLabel}>Clear all</Text>
-            </TouchableOpacity>
-          ) : null
-        }
       />
       <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
         Devotional Program

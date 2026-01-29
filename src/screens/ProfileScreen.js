@@ -17,7 +17,11 @@ export default function ProfileScreen({
       : '';
 
   return (
-    <BaseScreen styles={styles} variant="plain" style={styles.bottomNavScreen}>
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.bottomNavScreen}
+    >
       <Text style={styles.bottomNavScreenTitle}>Profile</Text>
       {isAuthenticated ? (
         <>

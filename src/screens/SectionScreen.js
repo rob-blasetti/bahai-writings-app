@@ -2,7 +2,6 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { FlatList, PanResponder, ScrollView, Text, TouchableOpacity, View } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { ProgramIconButton } from '../components/IconButtons';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import Passage from '../components/Passage';
 import BaseScreen from '../components/BaseScreen';
 
@@ -282,43 +281,41 @@ export default function SectionScreen({
   return (
     <BaseScreen
       styles={styles}
-      variant="section"
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{
+        title: (
+          <View style={styles.topBarTitleStack}>
+            <Text
+              style={styles.topBarTitlePrimary}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {selectedWriting.title}
+            </Text>
+            <Text
+              style={styles.topBarTitleSecondary}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {selectedSection.title}
+            </Text>
+          </View>
+        ),
+        backAccessibilityLabel: 'Back',
+        containerStyle: [styles.sectionHeader, styles.sectionHeaderTopRow],
+        rightAccessory: (
+          <ProgramIconButton
+            styles={styles}
+            hasProgramPassages={hasProgramPassages}
+            programBadgeLabel={programBadgeLabel}
+            onPress={onOpenProgram}
+          />
+        ),
+        onBack,
+      }}
       {...panResponder.panHandlers}
     >
-      <View style={styles.sectionHeader}>
-        <NavigationTopBar
-          styles={styles}
-          onBack={onBack}
-          backAccessibilityLabel="Back to sections"
-          title={
-            <View style={styles.topBarTitleStack}>
-              <Text
-                style={styles.topBarTitlePrimary}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {selectedWriting.title}
-              </Text>
-              <Text
-                style={styles.topBarTitleSecondary}
-                numberOfLines={1}
-                ellipsizeMode="tail"
-              >
-                {selectedSection.title}
-              </Text>
-            </View>
-          }
-          containerStyle={styles.sectionHeaderTopRow}
-          rightAccessory={
-            <ProgramIconButton
-              styles={styles}
-              hasProgramPassages={hasProgramPassages}
-              programBadgeLabel={programBadgeLabel}
-              onPress={onOpenProgram}
-            />
-          }
-        />
-      </View>
       {selectedSection.blocks.length === 0 ? (
         <Text
           style={[
@@ -346,8 +343,8 @@ export default function SectionScreen({
               }
               style={styles.sectionPagerList}
               contentContainerStyle={styles.sectionPagerContent}
-              onViewableItemsChanged={sectionViewableItemsChanged.current}
-              viewabilityConfig={sectionViewabilityConfig.current}
+              onViewableItemsChanged={sectionViewableItemsChanged}
+              viewabilityConfig={sectionViewabilityConfig}
               getItemLayout={(_, index) => ({
                 length: sectionPageWidth,
                 offset: sectionPageWidth * index,

@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import BaseScreen from '../components/BaseScreen';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 
@@ -24,12 +23,10 @@ export default function SignInScreen({
   const [isPasswordVisible, setPasswordVisible] = useState(false);
 
   return (
-    <BaseScreen styles={styles}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onCancel}
-        backAccessibilityLabel="Back"
-      />
+    <BaseScreen
+      styles={styles}
+      topNav={{ backAccessibilityLabel: 'Back', onBack: onCancel }}
+    >
       <View style={styles.authFormContainer}>
         <Text style={styles.authFormTitle}>Sign in to Liquid Spirit</Text>
         <Text style={styles.authFormSubtitle}>

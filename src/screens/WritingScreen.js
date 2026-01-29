@@ -1,7 +1,5 @@
 import React, { useCallback } from 'react';
 import { FlatList, Text, TouchableOpacity, View } from 'react-native';
-import { ProgramIconButton } from '../components/IconButtons';
-import { NavigationTopBar } from '../components/NavigationTopBar';
 import BaseScreen from '../components/BaseScreen';
 
 export default function WritingScreen({
@@ -10,11 +8,7 @@ export default function WritingScreen({
   selectedWriting,
   writingSections,
   collectionLabel,
-  onBack,
   onSelectSection,
-  onOpenProgram,
-  hasProgramPassages,
-  programBadgeLabel,
 }) {
   const renderSectionItem = useCallback(
     ({ item, index }) => {
@@ -50,12 +44,12 @@ export default function WritingScreen({
   }
 
   return (
-    <BaseScreen styles={styles}>
-      <NavigationTopBar
-        styles={styles}
-        onBack={onBack}
-        backAccessibilityLabel="Back to library"
-        title={
+    <BaseScreen
+      styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
+      topNav={{
+        title: (
           <View style={styles.topBarTitleStack}>
             <Text
               style={styles.topBarTitlePrimary}
@@ -72,8 +66,10 @@ export default function WritingScreen({
               {selectedWriting.title}
             </Text>
           </View>
-        }
-      />
+        ),
+        backAccessibilityLabel: 'Back',
+      }}
+    >
       <Text
         style={[
           styles.detailSubtitle,

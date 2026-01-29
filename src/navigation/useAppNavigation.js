@@ -10,35 +10,45 @@ export function useAppNavigation({
   const [isNavigationReady, setIsNavigationReady] = useState(false);
   const pendingNavigationRef = useRef(null);
   const [currentScreen, setCurrentScreen] = useState(initialRouteName);
+  const [currentTab, setCurrentTab] = useState(initialTab);
 
   const navigationReady = isNavigationReady && navigationRef.isReady();
 
-  const flushPendingNavigation = useCallback(() => {
-    if (!navigationReady || !pendingNavigationRef.current) {
-      return;
-    }
-    const { screenName, params } = pendingNavigationRef.current;
-    pendingNavigationRef.current = null;
-    if (BOTTOM_TAB_SET.has(screenName)) {
-      navigationRef.navigate('tabs', { screen: screenName, params });
-      return;
-    }
-    if (params) {
-      navigationRef.navigate(screenName, params);
-    } else {
-      navigationRef.navigate(screenName);
-    }
-  }, [navigationReady, navigationRef]);
+  const getHasTabs = useCallback(() => {
+    const rootState = navigationRef.getRootState();
+    const routeNames = rootState?.routeNames ?? [];
+    return routeNames.some(name => BOTTOM_TAB_SET.has(name));
+  }, [navigationRef]);
 
-  useEffect(() => {
-    flushPendingNavigation();
-  }, [flushPendingNavigation]);
+  const updateCurrentRoutes = useCallback(() => {
+    const nextRouteName = navigationRef.getCurrentRoute()?.name;
+    if (nextRouteName) {
+      setCurrentScreen(previous =>
+        previous === nextRouteName ? previous : nextRouteName,
+      );
+    }
+    const rootState = navigationRef.getRootState();
+    const nextTab = rootState?.routes?.[rootState.index]?.name;
+    if (nextTab && BOTTOM_TAB_SET.has(nextTab)) {
+      setCurrentTab(nextTab);
+    }
+  }, [navigationRef]);
 
   const navigateToScreen = useCallback(
     (screenName, params) => {
       if (navigationReady) {
+        const hasTabs = getHasTabs();
         if (BOTTOM_TAB_SET.has(screenName)) {
-          navigationRef.navigate('tabs', { screen: screenName, params });
+          if (params) {
+            navigationRef.navigate(screenName, params);
+          } else {
+            navigationRef.navigate(screenName);
+          }
+          return;
+        }
+        if (hasTabs) {
+          const tabTarget = currentTab ?? initialTab;
+          navigationRef.navigate(tabTarget, { screen: screenName, params });
           return;
         }
         if (params) {
@@ -50,25 +60,34 @@ export function useAppNavigation({
       }
       pendingNavigationRef.current = { screenName, params };
     },
-    [navigationReady, navigationRef],
+    [currentTab, getHasTabs, initialTab, navigationReady, navigationRef],
   );
+
+  const flushPendingNavigation = useCallback(() => {
+    if (!navigationReady || !pendingNavigationRef.current) {
+      return;
+    }
+    const { screenName, params } = pendingNavigationRef.current;
+    pendingNavigationRef.current = null;
+    if (params) {
+      navigateToScreen(screenName, params);
+    } else {
+      navigateToScreen(screenName);
+    }
+  }, [navigateToScreen, navigationReady]);
+
+  useEffect(() => {
+    flushPendingNavigation();
+  }, [flushPendingNavigation]);
 
   const handleNavigationReady = useCallback(() => {
     setIsNavigationReady(true);
-    const initialRoute = navigationRef.getCurrentRoute();
-    if (initialRoute?.name) {
-      setCurrentScreen(initialRoute.name);
-    }
-  }, [navigationRef]);
+    updateCurrentRoutes();
+  }, [updateCurrentRoutes]);
 
   const handleNavigationStateChange = useCallback(() => {
-    const nextRouteName = navigationRef.getCurrentRoute()?.name;
-    if (nextRouteName) {
-      setCurrentScreen(previous =>
-        previous === nextRouteName ? previous : nextRouteName,
-      );
-    }
-  }, [navigationRef]);
+    updateCurrentRoutes();
+  }, [updateCurrentRoutes]);
 
   const goBack = useCallback(() => {
     if (navigationReady) {
