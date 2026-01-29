@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
 import Card from '../components/Card';
+import ScreenTitle from '../components/ScreenTitle';
 
 const CARD_IMAGES = {
   writings: require('../../assets/images/explore-writings.png'),
@@ -24,6 +25,7 @@ export default function ExploreScreen({
       style={styles.homeContainer}
       scrollable
     >
+      <ScreenTitle styles={styles} title="Explore" />
       <View style={styles.homeHeader}>
         <Text style={styles.sectionTitle}>Where would you like to start?</Text>
         <Text style={styles.homeHeaderSubtitle}>

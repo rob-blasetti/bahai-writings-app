@@ -8,7 +8,6 @@ import React, {
 import {
   Alert,
   ImageBackground,
-  Modal,
   Platform,
   ScrollView,
   Text,
@@ -24,6 +23,7 @@ import {
   getShareableBlockText,
 } from '../sharing/shareUtils';
 import BaseScreen from '../components/BaseScreen';
+import BaseModal from '../components/BaseModal';
 
 const getThemeChipStyle = (theme, isActive) => ({
   borderColor: theme.accentColor,
@@ -936,50 +936,44 @@ export default function ShareEditorScreen({
         </TouchableOpacity>
       </View>
 
-      <Modal
+      <BaseModal
         visible={shareSheetVisible}
-        transparent
+        onClose={handleCloseShareSheet}
+        styles={styles}
         animationType="fade"
-        onRequestClose={handleCloseShareSheet}
+        backdropStyle={styles.shareDestinationBackdrop}
+        contentStyle={styles.shareDestinationSheet}
+        closeAccessibilityLabel="Close share options"
       >
-        <View style={styles.shareDestinationBackdrop}>
-          <TouchableOpacity
-            style={styles.shareDestinationDismiss}
-            accessibilityRole="button"
-            onPress={handleCloseShareSheet}
-          />
-          <View style={styles.shareDestinationSheet}>
-            <Text style={styles.shareDestinationTitle}>Share to…</Text>
-            <View style={styles.shareDestinationOptions}>
-              {shareDestinations.map(destination => (
-                <TouchableOpacity
-                  key={destination.id}
-                  onPress={() => handleShareToDestination(destination.id)}
-                  style={styles.shareDestinationOption}
-                  accessibilityRole="button"
-                >
-                  <Ionicons
-                    name={destination.icon}
-                    size={22}
-                    color="#3b2a15"
-                    style={styles.shareDestinationOptionIcon}
-                  />
-                  <Text style={styles.shareDestinationOptionLabel}>
-                    {destination.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+        <Text style={styles.shareDestinationTitle}>Share to…</Text>
+        <View style={styles.shareDestinationOptions}>
+          {shareDestinations.map(destination => (
             <TouchableOpacity
-              onPress={handleCloseShareSheet}
-              style={styles.shareDestinationCancel}
+              key={destination.id}
+              onPress={() => handleShareToDestination(destination.id)}
+              style={styles.shareDestinationOption}
               accessibilityRole="button"
             >
-              <Text style={styles.shareDestinationCancelLabel}>Cancel</Text>
+              <Ionicons
+                name={destination.icon}
+                size={22}
+                color="#3b2a15"
+                style={styles.shareDestinationOptionIcon}
+              />
+              <Text style={styles.shareDestinationOptionLabel}>
+                {destination.label}
+              </Text>
             </TouchableOpacity>
-          </View>
+          ))}
         </View>
-      </Modal>
+        <TouchableOpacity
+          onPress={handleCloseShareSheet}
+          style={styles.shareDestinationCancel}
+          accessibilityRole="button"
+        >
+          <Text style={styles.shareDestinationCancelLabel}>Cancel</Text>
+        </TouchableOpacity>
+      </BaseModal>
     </BaseScreen>
   );
 }

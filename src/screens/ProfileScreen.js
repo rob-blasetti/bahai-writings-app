@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
+import ScreenTitle from '../components/ScreenTitle';
 
 export default function ProfileScreen({
   styles,
@@ -17,12 +18,8 @@ export default function ProfileScreen({
       : '';
 
   return (
-    <BaseScreen
-      styles={styles}
-      variant="plain"
-      style={styles.bottomNavScreen}
-    >
-      <Text style={styles.bottomNavScreenTitle}>Profile</Text>
+    <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
+      <ScreenTitle styles={styles} title="Profile" />
       {isAuthenticated ? (
         <>
           <Text style={styles.bottomNavScreenSubtitle}>

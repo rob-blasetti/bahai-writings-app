@@ -1,9 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Platform,
-  Pressable,
   ScrollView,
   Text,
   TextInput,
@@ -15,6 +13,7 @@ import DateTimePicker, {
 } from '@react-native-community/datetimepicker';
 import Passage from '../components/Passage';
 import BaseScreen from '../components/BaseScreen';
+import BaseModal from '../components/BaseModal';
 
 const PROGRAM_STEPS = [
   { id: 'program', label: 'Program' },
@@ -118,115 +117,107 @@ function ProgramThemeModal({
   const hasSelection = selectionIds.length > 0;
 
   return (
-    <Modal
+    <BaseModal
       visible={visible}
+      onClose={onClose}
+      styles={styles}
       animationType="fade"
-      transparent
-      onRequestClose={onClose}
+      backdropStyle={styles.programModalBackdrop}
+      contentStyle={styles.programModalCard}
+      closeAccessibilityLabel="Close theme search"
     >
-      <Pressable style={styles.programModalBackdrop} onPress={onClose}>
-        <Pressable
-          style={styles.programModalCard}
-          onPress={() => {}}
-          accessibilityViewIsModal
+      <Text style={styles.programModalTitle}>Generate by theme</Text>
+      <Text style={styles.programModalDescription}>
+        Enter a keyword to find sections related to your theme. Select the
+        sections you want to add to your devotional.
+      </Text>
+      <TextInput
+        value={themeQuery}
+        onChangeText={onChangeThemeQuery}
+        placeholder="e.g. unity, joy, detachment"
+        placeholderTextColor="#b8a58b"
+        style={[styles.programTextInput, styles.programModalInput]}
+        autoCapitalize="none"
+        autoCorrect={false}
+        returnKeyType="search"
+        onSubmitEditing={onSearchTheme}
+      />
+      <View style={styles.programModalSearchRow}>
+        <TouchableOpacity
+          onPress={onSearchTheme}
+          style={styles.programModalButton}
+          disabled={isSearching}
         >
-          <Text style={styles.programModalTitle}>Generate by theme</Text>
-          <Text style={styles.programModalDescription}>
-            Enter a keyword to find sections related to your theme. Select the
-            sections you want to add to your devotional.
+          {isSearching ? (
+            <ActivityIndicator color="#3b2a15" />
+          ) : (
+            <Text style={styles.programModalButtonLabel}>Search</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+      {searchMessage ? (
+        <Text style={styles.programModalMessage}>{searchMessage}</Text>
+      ) : null}
+      <ScrollView
+        style={styles.programModalResults}
+        contentContainerStyle={styles.programModalResultsContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {hasResults
+          ? searchResults.map(result => {
+              const isSelected = selectionIds.includes(result.id);
+              return (
+                <TouchableOpacity
+                  key={result.id}
+                  onPress={() => onToggleSection(result.id)}
+                  style={[
+                    styles.programModalResult,
+                    isSelected && styles.programModalResultSelected,
+                  ]}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <Text style={styles.programModalResultTitle}>
+                    {result.sectionTitle}
+                  </Text>
+                  <Text style={styles.programModalResultWriting}>
+                    {result.writingTitle}
+                  </Text>
+                  {result.preview ? (
+                    <Text style={styles.programModalResultPreview}>
+                      {result.preview}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.programModalResultToggle}>
+                    {isSelected
+                      ? 'Included in devotional'
+                      : 'Tap to include this section'}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })
+          : null}
+      </ScrollView>
+      <View style={styles.programModalActions}>
+        <TouchableOpacity onPress={onClose} style={styles.programModalButton}>
+          <Text style={styles.programModalButtonLabel}>Cancel</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onAddSelected}
+          style={[
+            styles.programModalButton,
+            styles.programModalActionSpacing,
+            styles.programModalButtonPrimary,
+            (!hasSelection || isSearching) && styles.buttonDisabled,
+          ]}
+          disabled={!hasSelection || isSearching}
+        >
+          <Text style={styles.programModalButtonPrimaryLabel}>
+            Add selected sections
           </Text>
-          <TextInput
-            value={themeQuery}
-            onChangeText={onChangeThemeQuery}
-            placeholder="e.g. unity, joy, detachment"
-            placeholderTextColor="#b8a58b"
-            style={[styles.programTextInput, styles.programModalInput]}
-            autoCapitalize="none"
-            autoCorrect={false}
-            returnKeyType="search"
-            onSubmitEditing={onSearchTheme}
-          />
-          <View style={styles.programModalSearchRow}>
-            <TouchableOpacity
-              onPress={onSearchTheme}
-              style={styles.programModalButton}
-              disabled={isSearching}
-            >
-              {isSearching ? (
-                <ActivityIndicator color="#3b2a15" />
-              ) : (
-                <Text style={styles.programModalButtonLabel}>Search</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          {searchMessage ? (
-            <Text style={styles.programModalMessage}>{searchMessage}</Text>
-          ) : null}
-          <ScrollView
-            style={styles.programModalResults}
-            contentContainerStyle={styles.programModalResultsContent}
-            keyboardShouldPersistTaps="handled"
-          >
-            {hasResults
-              ? searchResults.map(result => {
-                  const isSelected = selectionIds.includes(result.id);
-                  return (
-                    <TouchableOpacity
-                      key={result.id}
-                      onPress={() => onToggleSection(result.id)}
-                      style={[
-                        styles.programModalResult,
-                        isSelected && styles.programModalResultSelected,
-                      ]}
-                      accessibilityRole="button"
-                      accessibilityState={{ selected: isSelected }}
-                    >
-                      <Text style={styles.programModalResultTitle}>
-                        {result.sectionTitle}
-                      </Text>
-                      <Text style={styles.programModalResultWriting}>
-                        {result.writingTitle}
-                      </Text>
-                      {result.preview ? (
-                        <Text style={styles.programModalResultPreview}>
-                          {result.preview}
-                        </Text>
-                      ) : null}
-                      <Text style={styles.programModalResultToggle}>
-                        {isSelected
-                          ? 'Included in devotional'
-                          : 'Tap to include this section'}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })
-              : null}
-          </ScrollView>
-          <View style={styles.programModalActions}>
-            <TouchableOpacity
-              onPress={onClose}
-              style={styles.programModalButton}
-            >
-              <Text style={styles.programModalButtonLabel}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              onPress={onAddSelected}
-              style={[
-                styles.programModalButton,
-                styles.programModalActionSpacing,
-                styles.programModalButtonPrimary,
-                (!hasSelection || isSearching) && styles.buttonDisabled,
-              ]}
-              disabled={!hasSelection || isSearching}
-            >
-              <Text style={styles.programModalButtonPrimaryLabel}>
-                Add selected sections
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </TouchableOpacity>
+      </View>
+    </BaseModal>
   );
 }
 
@@ -578,41 +569,42 @@ function SessionDetailsForm({
       />
       </View>
       {Platform.OS === 'ios' && iosPickerMode ? (
-        <Modal transparent animationType="fade" visible onRequestClose={handleIosPickerCancel}>
-          <Pressable
-            style={styles.programPickerModalBackdrop}
-            onPress={handleIosPickerCancel}
-          >
-            <Pressable style={styles.programPickerModalCard} onPress={() => {}}>
-              <DateTimePicker
-                mode={iosPickerMode}
-                value={iosPickerDate}
-                display="spinner"
-                onChange={handleIosPickerChange}
-                style={styles.programPickerModalWheel}
-              />
-              <View style={styles.programPickerModalActions}>
-                <TouchableOpacity
-                  onPress={handleIosPickerCancel}
-                  style={styles.programPickerModalButton}
-                >
-                  <Text style={styles.programPickerModalButtonLabel}>Cancel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={handleIosPickerConfirm}
-                  style={[
-                    styles.programPickerModalButton,
-                    styles.programPickerModalButtonPrimary,
-                  ]}
-                >
-                  <Text style={styles.programPickerModalButtonPrimaryLabel}>
-                    Done
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </Pressable>
-          </Pressable>
-        </Modal>
+        <BaseModal
+          visible
+          onClose={handleIosPickerCancel}
+          styles={styles}
+          animationType="fade"
+          backdropStyle={styles.programPickerModalBackdrop}
+          contentStyle={styles.programPickerModalCard}
+          closeAccessibilityLabel="Close picker"
+        >
+          <DateTimePicker
+            mode={iosPickerMode}
+            value={iosPickerDate}
+            display="spinner"
+            onChange={handleIosPickerChange}
+            style={styles.programPickerModalWheel}
+          />
+          <View style={styles.programPickerModalActions}>
+            <TouchableOpacity
+              onPress={handleIosPickerCancel}
+              style={styles.programPickerModalButton}
+            >
+              <Text style={styles.programPickerModalButtonLabel}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={handleIosPickerConfirm}
+              style={[
+                styles.programPickerModalButton,
+                styles.programPickerModalButtonPrimary,
+              ]}
+            >
+              <Text style={styles.programPickerModalButtonPrimaryLabel}>
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BaseModal>
       ) : null}
     </>
   );

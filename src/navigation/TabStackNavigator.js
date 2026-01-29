@@ -134,6 +134,7 @@ export default function TabStackNavigator({
     continueSection,
     openSearchResult,
     removeVerse,
+    openVerse,
     selectFontScale,
     logout,
   } = handlers;
@@ -168,8 +169,8 @@ export default function TabStackNavigator({
           styles={styles}
           scaledTypography={scaledTypography}
           verses={myVerses}
-          renderBlockContent={renderBlockContent}
           onRemoveVerse={removeVerse}
+          onOpenVerse={openVerse}
         />
       );
     }

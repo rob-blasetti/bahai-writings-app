@@ -17,6 +17,8 @@ export default function SettingsScreen({
   return (
     <BaseScreen
       styles={styles}
+      variant="plain"
+      style={styles.homeContainer}
       topNav={{
         backAccessibilityLabel: 'Back',
         rightAccessory: (

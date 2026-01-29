@@ -7,6 +7,7 @@ import {
   View,
 } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
+import ScreenTitle from '../components/ScreenTitle';
 
 const MAX_RESULTS = 50;
 const MAX_RECENT_QUERIES = 6;
@@ -137,6 +138,7 @@ export default function SearchScreen({
 
   return (
     <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
+      <ScreenTitle styles={styles} title="Search" />
       <TextInput
         value={query}
         onChangeText={setQuery}

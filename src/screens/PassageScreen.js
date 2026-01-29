@@ -61,7 +61,6 @@ export default function PassageScreen({
     <BaseScreen
       styles={styles}
       variant="plain"
-      style={styles.homeContainer}
       topNav={{
         title: 'Choose At Random',
         backAccessibilityLabel: 'Back',
@@ -77,7 +76,7 @@ export default function PassageScreen({
       }}
       {...panResponder.panHandlers}
     >
-      <ScrollView contentContainerStyle={styles.contentScroll}>
+      <ScrollView>
         <View style={styles.passageMeta}>
           <Text style={styles.passageMetaLabel}>From</Text>
           <Text

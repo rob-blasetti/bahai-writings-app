@@ -1,83 +1,35 @@
 import React, { useCallback } from 'react';
-import { FlatList, Text, TouchableOpacity, View } from 'react-native';
-import Passage from '../components/Passage';
+import { FlatList, Text } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
-
-function VerseCard({ styles, item, index, renderBlockContent, onRemoveVerse }) {
-  const savedAtLabel =
-    typeof item.savedAt === 'number' && Number.isFinite(item.savedAt)
-      ? new Date(item.savedAt).toLocaleDateString()
-      : null;
-  const removeButton =
-    typeof onRemoveVerse === 'function' ? (
-      <TouchableOpacity
-        onPress={() => onRemoveVerse(item.id)}
-        style={styles.programRemoveButton}
-      >
-        <Text style={styles.programRemoveLabel}>Remove</Text>
-      </TouchableOpacity>
-    ) : null;
-
-  return (
-    <View style={styles.passageGroup}>
-      <View style={styles.passageMetaHeader}>
-        <View style={styles.passageMetaInfo}>
-          <Text style={styles.passageMetaLabel}>Saved passage {index + 1}</Text>
-          <Text style={styles.passageMetaWriting}>
-            {item.writingTitle ?? 'Saved passage'}
-          </Text>
-          {item.sectionTitle ? (
-            <Text style={styles.passageMetaSection}>{item.sectionTitle}</Text>
-          ) : null}
-          {savedAtLabel ? (
-            <Text style={styles.myVerseSavedAt}>Saved {savedAtLabel}</Text>
-          ) : null}
-        </View>
-        {removeButton}
-      </View>
-      <Passage>
-        <View style={styles.blockWrapper}>
-          {renderBlockContent(item.block, 0, {
-            writingTitle: item.writingTitle,
-            sectionTitle: item.sectionTitle,
-          })}
-        </View>
-      </Passage>
-    </View>
-  );
-}
+import ScreenTitle from '../components/ScreenTitle';
+import VerseCard from '../components/VerseCard';
 
 export default function MyVersesScreen({
   styles,
   scaledTypography,
   verses,
-  renderBlockContent,
   onRemoveVerse,
+  onOpenVerse,
 }) {
   const hasVerses = Array.isArray(verses) && verses.length > 0;
 
   const renderVerseCard = useCallback(
-    ({ item, index }) => (
+    ({ item }) => (
       <VerseCard
         styles={styles}
-        item={item}
-        index={index}
-        renderBlockContent={renderBlockContent}
-        onRemoveVerse={onRemoveVerse}
+        verse={item}
+        onRemove={onRemoveVerse}
+        onPress={onOpenVerse}
       />
     ),
-    [styles, renderBlockContent, onRemoveVerse],
+    [styles, onRemoveVerse, onOpenVerse],
   );
 
   if (!hasVerses) {
     return (
-      <BaseScreen
-        styles={styles}
-        variant="plain"
-        style={styles.bottomNavScreen}
-      >
-        <Text style={styles.bottomNavScreenTitle}>My Verses</Text>
-        <Text style={styles.bottomNavScreenSubtitle}>
+      <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
+        <ScreenTitle styles={styles} title="My Verses" />
+        <Text style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}>
           Save passages from sections or the daily passage and they will appear
           here.
         </Text>
@@ -87,9 +39,7 @@ export default function MyVersesScreen({
 
   return (
     <BaseScreen styles={styles} variant="plain" style={styles.homeContainer}>
-      <Text style={[styles.contentTitle, scaledTypography.contentTitle]}>
-        My Verses
-      </Text>
+      <ScreenTitle styles={styles} title="My Verses" />
       <Text style={[styles.detailSubtitle, scaledTypography.detailSubtitle]}>
         Your saved passages for quick reference and reflection.
       </Text>

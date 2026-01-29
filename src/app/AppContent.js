@@ -534,6 +534,36 @@ function AppContent() {
     ],
   );
 
+  const handleOpenVerse = useCallback(
+    verse => {
+      if (!verse || !verse.writingId || !verse.sectionId) {
+        return;
+      }
+      const blockId = verse.block?.id ?? null;
+      const matchedPassage = blockId
+        ? availablePassages.find(
+            passage =>
+              passage.writingId === verse.writingId &&
+              passage.sectionId === verse.sectionId &&
+              passage.block?.id === blockId,
+          )
+        : null;
+      const blockIndex = matchedPassage?.blockIndex ?? 0;
+
+      handleOpenSearchResult({
+        writingId: verse.writingId,
+        sectionId: verse.sectionId,
+        blockId,
+        blockIndex,
+        query: null,
+        matchIndex: 0,
+        blockTextLength:
+          typeof verse.block?.text === 'string' ? verse.block.text.length : 0,
+      });
+    },
+    [availablePassages, handleOpenSearchResult],
+  );
+
   const handleShowRandomPassage = () => {
     const nextPassage = selectRandomPassage(availablePassages);
     if (!nextPassage) {
@@ -1171,6 +1201,7 @@ function AppContent() {
       continueSection: handleContinueRandomPassage,
       openSearchResult: handleOpenSearchResult,
       removeVerse: handleRemoveFromMyVerses,
+      openVerse: handleOpenVerse,
     },
   };
 
