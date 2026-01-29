@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Text, TouchableOpacity, View } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { cleanBlockText } from '../writings/passageUtils';
 
 const MAX_PREVIEW_LENGTH = 160;
@@ -36,19 +37,26 @@ export default function VerseCard({
       style={styles.verseCard}
       accessibilityRole="button"
     >
-      <View style={styles.verseCardHeader}>
-        <Text style={styles.verseCardLabel}>Saved verse</Text>
-        {typeof onRemove === 'function' ? (
+      {typeof onRemove === 'function' ? (
+        <View style={styles.verseCardHeader}>
+          <View
+            style={styles.verseCardBookmark}
+            accessible={false}
+            accessibilityElementsHidden
+            importantForAccessibility="no"
+          >
+            <Ionicons name="bookmark" size={24} color="#b0302a" />
+          </View>
           <TouchableOpacity
             onPress={() => onRemove(verse.id)}
             style={styles.verseCardRemoveButton}
             accessibilityRole="button"
             accessibilityLabel="Remove saved verse"
           >
-            <Text style={styles.verseCardRemoveLabel}>Remove</Text>
+            <Ionicons name="close" size={18} color="#3b2a15" />
           </TouchableOpacity>
-        ) : null}
-      </View>
+        </View>
+      ) : null}
       <Text style={styles.verseCardWriting}>
         {verse?.writingTitle ?? 'Saved passage'}
       </Text>
