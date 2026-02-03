@@ -17,7 +17,9 @@ export default function LibraryScreen({
         style={styles.homeCard}
       >
         <Text style={styles.homeCardTitle}>{item.title}</Text>
-        <Text style={styles.homeCardSubtitle}>Tap to explore this writing</Text>
+        <Text style={styles.homeCardSubtitle}>
+          {item.author ? item.author : 'Tap to explore this writing'}
+        </Text>
       </TouchableOpacity>
     ),
     [onSelectWriting, styles],

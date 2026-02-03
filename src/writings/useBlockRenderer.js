@@ -17,7 +17,12 @@ export function useBlockRenderer({
       if (!block) {
         return null;
       }
-      const { writingTitle = null, sectionTitle = null } = options;
+      const {
+        writingTitle = null,
+        sectionTitle = null,
+        onLongPress = null,
+        highlightColor = null,
+      } = options;
       const normalizedBlockText =
         typeof block.text === 'string' ? block.text.trim() : '';
       const canOpenReflection = normalizedBlockText.length > 0;
@@ -66,10 +71,19 @@ export function useBlockRenderer({
           ? wrapperStyle
           : [wrapperStyle];
         const styleArray = baseStyles.filter(Boolean);
+
+        const highlightStyle = highlightColor
+          ? styles[`userHighlight${String(highlightColor).charAt(0).toUpperCase()}${String(highlightColor).slice(1)}`]
+          : null;
+
+        const wrapperStyles = highlightStyle
+          ? [...styleArray, styles.userHighlightBlock, highlightStyle]
+          : styleArray;
+
         if (canOpenReflection) {
           return (
             <TouchableOpacity
-              style={styleArray}
+              style={wrapperStyles}
               activeOpacity={0.85}
               onPress={() =>
                 onShowReflection({
@@ -78,12 +92,14 @@ export function useBlockRenderer({
                   sectionTitle,
                 })
               }
+              onLongPress={typeof onLongPress === 'function' ? onLongPress : undefined}
+              delayLongPress={250}
             >
               {children}
             </TouchableOpacity>
           );
         }
-        return <View style={styleArray}>{children}</View>;
+        return <View style={wrapperStyles}>{children}</View>;
       };
 
       const renderTextWithNumber = ({ text, style, key, numberStyle }) => {

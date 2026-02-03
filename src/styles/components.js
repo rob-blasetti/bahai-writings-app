@@ -670,8 +670,14 @@ export const appStyles = StyleSheet.create({
   },
   passageMetaSection: {
     fontSize: 16,
-    color: '#4a4a4a',
+    color: '#6f5a35',
     marginTop: 2,
+  },
+  passageMetaRange: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8b7a65',
   },
   programList: {
     flex: 1,
@@ -1209,6 +1215,174 @@ export const appStyles = StyleSheet.create({
   },
   blockWrapper: {
     marginBottom: 18,
+  },
+  userHighlightBlock: {
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#e6d9c4',
+  },
+  userHighlightYellow: {
+    backgroundColor: '#fff6d6',
+  },
+  userHighlightGreen: {
+    backgroundColor: '#eaf6ee',
+  },
+  userHighlightBlue: {
+    backgroundColor: '#eaf2ff',
+  },
+  userHighlightPink: {
+    backgroundColor: '#ffeaf3',
+  },
+  userHighlightOrange: {
+    backgroundColor: '#fff0e2',
+  },
+  userHighlightPurple: {
+    backgroundColor: '#f2eaff',
+  },
+  annotationModalBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(43, 27, 10, 0.65)',
+    justifyContent: 'flex-end',
+    paddingHorizontal: 0,
+    paddingBottom: 0,
+  },
+  annotationModalCard: {
+    backgroundColor: '#fffdf8',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingBottom: 20,
+    paddingTop: 48,
+    width: '100%',
+    maxHeight: '90%',
+    shadowColor: '#000000',
+    shadowOpacity: 0.2,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 8,
+  },
+  annotationModalHeader: {
+    marginBottom: 12,
+  },
+  annotationModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#2c1f0c',
+    marginBottom: 4,
+  },
+  annotationModalMeta: {
+    fontSize: 14,
+    color: '#6f5a35',
+    marginBottom: 12,
+  },
+  annotationModalDivider: {
+    height: 1,
+    backgroundColor: '#e6d9c4',
+    marginTop: 10,
+  },
+  annotationModalVisibilityRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 8,
+    rowGap: 8,
+    marginBottom: 12,
+  },
+  annotationModalVisibilityChip: {
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    backgroundColor: '#fffaf3',
+  },
+  annotationModalVisibilityChipActive: {
+    backgroundColor: '#3b2a15',
+    borderColor: '#3b2a15',
+  },
+  annotationModalVisibilityChipLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#3b2a15',
+  },
+  annotationModalVisibilityChipLabelActive: {
+    color: '#fffaf3',
+  },
+  annotationModalComposerRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    columnGap: 12,
+  },
+  annotationModalInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 14,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    minHeight: 48,
+    maxHeight: 120,
+    fontSize: 15,
+    color: '#3b2a15',
+  },
+  annotationModalSubmit: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 14,
+    backgroundColor: '#6d9c7c',
+    borderWidth: 1,
+    borderColor: '#598467',
+  },
+  annotationModalSubmitDisabled: {
+    opacity: 0.6,
+  },
+  annotationModalSubmitLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#ffffff',
+  },
+  annotationModalErrorText: {
+    fontSize: 13,
+    color: '#b04b3c',
+    marginTop: 10,
+  },
+  annotationModalListContent: {
+    paddingBottom: 24,
+  },
+  annotationCommentCard: {
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    marginBottom: 12,
+  },
+  annotationCommentMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  annotationCommentBadge: {
+    borderRadius: 10,
+    backgroundColor: '#f0e4d2',
+    paddingVertical: 2,
+    paddingHorizontal: 8,
+  },
+  annotationCommentBadgeLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#3b2a15',
+    letterSpacing: 0.8,
+  },
+  annotationCommentDate: {
+    fontSize: 12,
+    color: '#8b7a65',
+  },
+  annotationCommentBody: {
+    fontSize: 14,
+    color: '#3b2a15',
+    lineHeight: 20,
   },
   shareActionChip: {
     width: 44,
