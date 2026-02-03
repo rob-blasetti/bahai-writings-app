@@ -81,6 +81,42 @@ function isNoiseHeading(title) {
   return false;
 }
 
+function isFrontMatterHeading(title) {
+  const t = String(title ?? '').trim();
+  if (!t) return true;
+
+  if (/^prepared by\b/i.test(t)) return true;
+  if (/^of the universal house of justice\b/i.test(t)) return true;
+  if (/^research department\b/i.test(t)) return true;
+  if (/^revised\b/i.test(t)) return true;
+
+  // Dates like "February 1978" or "15 February 1978"
+  if (
+    /^(?:\d{1,2}\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$/i.test(
+      t,
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function stripTitleArtifacts(value) {
+  let t = normalizeWhitespace(value);
+  if (!t) return '';
+
+  // Remove trailing footnote markers like "Title [1]"
+  t = t.replace(/\s*\[\d+\]\s*$/g, '');
+
+  // Remove trailing digits that look like an accidentally-concatenated footnote marker (e.g. "Contributions1")
+  if (/\p{L}\d+$/u.test(t) && !/\s\d+$/u.test(t)) {
+    t = t.replace(/\d+$/g, '');
+  }
+
+  return t.trim();
+}
+
 function extractNavToc($) {
   const entries = [];
   const seen = new Set();
@@ -90,7 +126,7 @@ function extractNavToc($) {
     .each((_, el) => {
       const href = $(el).attr('href') || '';
       const id = href.startsWith('#') ? href.slice(1).trim() : '';
-      const title = normalizeWhitespace($(el).text());
+      const title = stripTitleArtifacts($(el).text());
       if (!id || id === '#' || !title) return;
       if (/^list of sections$/i.test(title)) return;
       if (seen.has(id)) return;
@@ -151,7 +187,7 @@ function extractMetadata($, fileName) {
     .replace(/\.xhtml$/i, '')
     .replace(/[_-]+/g, ' ');
 
-  const resolvedTitle = h1Title || titleTag || fallbackTitle;
+  const resolvedTitle = stripTitleArtifacts(h1Title || titleTag || fallbackTitle);
   const id = slugify(documentId) || slugify(fileName.replace(/\.xhtml$/i, ''));
 
   return {
@@ -333,6 +369,9 @@ function shouldPromoteParagraphToHeading(text) {
   // Avoid promoting things like "by Bahá’u’lláh" / "Translated by ..." into headings.
   if (isNoiseHeading(t)) return false;
 
+  // Avoid promoting common front-matter lines into headings.
+  if (isFrontMatterHeading(t)) return false;
+
   // A lot of bylines start lowercase; real headings usually don't.
   if (/^[a-z]/.test(t)) return false;
 
@@ -358,13 +397,23 @@ function buildToc(units) {
   const toc = [];
 
   const headings = [];
+  let seenRealHeading = false;
   for (let i = 0; i < units.length; i += 1) {
     const unit = units[i];
     if (unit.type === 'heading') {
-      const title = String(unit.text ?? '').trim();
+      let title = String(unit.text ?? '').trim();
+      if (!title) continue;
+      title = stripTitleArtifacts(title);
       if (!title) continue;
       if (isSubtitleHeading(title)) continue;
       if (isNoiseHeading(title)) continue;
+
+      // Exclude micro-sections in the very top front-matter.
+      if (!seenRealHeading && isFrontMatterHeading(title)) {
+        continue;
+      }
+
+      seenRealHeading = true;
       headings.push({ index: i, title });
     }
   }
@@ -412,9 +461,11 @@ function buildTocFromNav(navEntries, units) {
     const startIndex = current.index;
     const endIndex = next ? Math.max(next.index - 1, startIndex) : units.length - 1;
 
+    const title = stripTitleArtifacts(current.title);
+
     toc.push({
-      id: `sec:${slugify(current.title) || String(i + 1).padStart(3, '0')}`,
-      title: current.title,
+      id: `sec:${slugify(title) || String(i + 1).padStart(3, '0')}`,
+      title,
       start: units[startIndex].id,
       end: units[endIndex].id,
     });
@@ -459,15 +510,42 @@ async function exportOne({ fileName, outPath, version }) {
 
   const normalizedBlocks = convertNumericHeadings(promoteStandaloneHeadings(contentBlocks));
 
-  const units = dedupeAdjacentHeadings(
-    normalizedBlocks.map((block, index) => ({
-      id: makeUnitId(index + 1),
-      stableId: stableUnitId({ sourceId: block.sourceId, anchorIds: block.anchorIds, type: block.type, text: block.text }),
-      type: block.type,
-      text: block.text,
-      sourceAnchorIds: block.anchorIds,
-    })),
-  );
+  const units = dedupeAdjacentHeadings((() => {
+    const out = [];
+
+    for (let index = 0; index < normalizedBlocks.length; index += 1) {
+      const block = normalizedBlocks[index];
+      const text = String(block.text ?? '').trim();
+
+      // Skip citation-marker-only blocks like "[1]"; attach to previous unit instead.
+      const markerMatch = text.match(/^\[(\d+)\]$/);
+      if (markerMatch) {
+        const prev = out[out.length - 1];
+        if (prev) {
+          prev.refNoteIds = Array.isArray(prev.refNoteIds) ? prev.refNoteIds : [];
+          if (!prev.refNoteIds.includes(markerMatch[1])) {
+            prev.refNoteIds.push(markerMatch[1]);
+          }
+        }
+        continue;
+      }
+
+      out.push({
+        id: makeUnitId(index + 1),
+        stableId: stableUnitId({
+          sourceId: block.sourceId,
+          anchorIds: block.anchorIds,
+          type: block.type,
+          text: block.text,
+        }),
+        type: block.type,
+        text: block.text,
+        sourceAnchorIds: block.anchorIds,
+      });
+    }
+
+    return out;
+  })());
 
   const work = {
     workId: meta.id,
