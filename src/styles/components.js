@@ -13,6 +13,10 @@ export const appStyles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: '#ffffff',
   },
+  centerContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   bottomNavScreen: {
     flex: 1,
     paddingHorizontal: 24,
