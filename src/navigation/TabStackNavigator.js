@@ -190,6 +190,10 @@ export default function TabStackNavigator({
         onOpenPrayers={openPrayers}
         onChooseRandom={chooseRandom}
         onCreateDevotional={createDevotional}
+        recentComments={content.recentComments}
+        recentCommentsLoading={content.recentCommentsLoading}
+        recentCommentsError={content.recentCommentsError}
+        onOpenRecentComment={handlers.openRecentComment}
       />
     );
   };

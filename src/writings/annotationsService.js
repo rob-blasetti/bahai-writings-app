@@ -175,6 +175,22 @@ export async function deleteComment(commentId, { token } = {}) {
   });
 }
 
+export async function listRecentComments({ limit } = {}, { token } = {}) {
+  const base = resolveKaliBaseEndpoint();
+  if (!base) {
+    throw new Error(
+      'Kali endpoint is not configured. Set API_URL or LIQUID_SPIRIT_KALI_ENDPOINT.',
+    );
+  }
+
+  const params = new URLSearchParams();
+  if (typeof limit === 'number') params.set('limit', String(limit));
+
+  const url = `${base}/comments/recent?${params.toString()}`;
+  const result = await requestJson(url, { token });
+  return Array.isArray(result?.comments) ? result.comments : [];
+}
+
 export default {
   resolveKaliBaseEndpoint,
   createHighlight,
@@ -183,4 +199,5 @@ export default {
   createComment,
   listComments,
   deleteComment,
+  listRecentComments,
 };

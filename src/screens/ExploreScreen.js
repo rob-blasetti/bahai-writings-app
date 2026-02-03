@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
 import Card from '../components/Card';
+import RecentCommentsSection from '../components/RecentCommentsSection';
 import ScreenTitle from '../components/ScreenTitle';
 
 const CARD_IMAGES = {
@@ -17,6 +18,10 @@ export default function ExploreScreen({
   onOpenPrayers,
   onChooseRandom,
   onCreateDevotional,
+  recentComments,
+  recentCommentsLoading,
+  recentCommentsError,
+  onOpenRecentComment,
 }) {
   return (
     <BaseScreen
@@ -66,6 +71,14 @@ export default function ExploreScreen({
           accessibilityHint="Start a devotional program"
         />
       </View>
+
+      <RecentCommentsSection
+        styles={styles}
+        comments={recentComments}
+        isLoading={recentCommentsLoading}
+        error={recentCommentsError}
+        onPressComment={onOpenRecentComment}
+      />
     </BaseScreen>
   );
 }
