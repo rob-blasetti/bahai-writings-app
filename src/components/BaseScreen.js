@@ -41,7 +41,9 @@ export default function BaseScreen({
 
   const baseSurfaceStyle = useMemo(() => {
     const shouldUseSurface = variant !== 'plain';
-    const shouldClampWidth = variant !== 'full' && variant !== 'section';
+    // Clamp width on tablets for ALL variants except "full".
+    // This keeps layouts readable on iPad while still allowing full-bleed screens when needed.
+    const shouldClampWidth = variant !== 'full';
     const shouldUseSection = variant === 'section';
     const cardPadding = isTablet ? 28 : 20;
 
