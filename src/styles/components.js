@@ -256,6 +256,16 @@ export const appStyles = StyleSheet.create({
   homeListContent: {
     paddingBottom: 20,
   },
+  libraryAuthorHeader: {
+    marginTop: 18,
+    marginBottom: 10,
+    marginHorizontal: 4,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#6f5a35',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
   homeListEmpty: {
     flexGrow: 1,
     justifyContent: 'center',

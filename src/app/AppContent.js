@@ -254,34 +254,61 @@ function AppContent() {
     }),
     [fontScale],
   );
+  const isPrayerWork = useCallback(work => {
+    const title = String(work?.title ?? '');
+    const workId = String(work?.workId ?? '');
+    return /prayer/i.test(title) || /prayer/i.test(workId);
+  }, []);
+
+  const { prayersWorks, writingsWorks } = useMemo(() => {
+    const prayers = [];
+    const writings = [];
+
+    (Array.isArray(remoteWorks) ? remoteWorks : []).forEach(work => {
+      if (isPrayerWork(work)) {
+        prayers.push(work);
+      } else {
+        writings.push(work);
+      }
+    });
+
+    return { prayersWorks: prayers, writingsWorks: writings };
+  }, [isPrayerWork, remoteWorks]);
+
   const collectionOptions = useMemo(
     () => [
       {
-        key: 'works',
-        label: 'Writings Library',
-        count: remoteWorks.length,
+        key: 'writings',
+        label: 'Writings',
+        count: writingsWorks.length,
+      },
+      {
+        key: 'prayers',
+        label: 'Prayers',
+        count: prayersWorks.length,
       },
     ],
-    [remoteWorks.length],
+    [prayersWorks.length, writingsWorks.length],
   );
 
-  const activeCollection = useMemo(
-    () => ({ key: 'works', label: 'Writings Library', count: remoteWorks.length }),
-    [remoteWorks.length],
-  );
+  const resolvedActiveCollectionKey = activeCollectionKey || 'writings';
 
-  const scopedWritings = useMemo(
-    () =>
-      remoteWorks.map(work => ({
-        id: work.workId,
-        title: work.title,
-        author: work.author,
-        language: work.language,
-        version: work.version,
-        toc: work.toc,
-      })),
-    [remoteWorks],
-  );
+  const activeCollection = useMemo(() => {
+    const match = collectionOptions.find(option => option.key === resolvedActiveCollectionKey);
+    return match || collectionOptions[0] || { key: 'writings', label: 'Writings', count: 0 };
+  }, [collectionOptions, resolvedActiveCollectionKey]);
+
+  const scopedWritings = useMemo(() => {
+    const source = resolvedActiveCollectionKey === 'prayers' ? prayersWorks : writingsWorks;
+    return source.map(work => ({
+      id: work.workId,
+      title: work.title,
+      author: work.author,
+      language: work.language,
+      version: work.version,
+      toc: work.toc,
+    }));
+  }, [prayersWorks, resolvedActiveCollectionKey, writingsWorks]);
   const searchableSections = useMemo(() => [], []);
   const windowWidth = Dimensions.get('window').width;
   const horizontalInsets =
@@ -727,6 +754,7 @@ function AppContent() {
 
   const handleOpenCollections = () => {
     // Works-backed experience: go straight to library list.
+    setActiveCollectionKey('writings');
     navigateToScreen('home');
   };
 

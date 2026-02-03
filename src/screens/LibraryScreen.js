@@ -1,7 +1,12 @@
-import React, { useCallback } from 'react';
-import { FlatList, Text, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useMemo } from 'react';
+import { SectionList, Text, TouchableOpacity, View } from 'react-native';
 import { SettingsIconButton } from '../components/IconButtons';
 import BaseScreen from '../components/BaseScreen';
+
+function normalizeAuthor(author) {
+  const trimmed = String(author ?? '').trim();
+  return trimmed || 'Unknown';
+}
 
 export default function LibraryScreen({
   styles,
@@ -10,6 +15,31 @@ export default function LibraryScreen({
   onSelectWriting,
   onOpenSettings,
 }) {
+  const sections = useMemo(() => {
+    const groups = new Map();
+
+    (Array.isArray(writings) ? writings : []).forEach(work => {
+      const author = normalizeAuthor(work?.author);
+      if (!groups.has(author)) {
+        groups.set(author, []);
+      }
+      groups.get(author).push(work);
+    });
+
+    const authorNames = Array.from(groups.keys()).sort((a, b) => {
+      if (a === 'Unknown') return 1;
+      if (b === 'Unknown') return -1;
+      return a.localeCompare(b);
+    });
+
+    return authorNames.map(author => {
+      const data = (groups.get(author) || []).slice().sort((a, b) =>
+        String(a?.title ?? '').localeCompare(String(b?.title ?? '')),
+      );
+      return { title: author, data };
+    });
+  }, [writings]);
+
   const renderWritingItem = useCallback(
     ({ item }) => (
       <TouchableOpacity
@@ -23,12 +53,16 @@ export default function LibraryScreen({
     [onSelectWriting, styles],
   );
 
+  const renderSectionHeader = useCallback(
+    ({ section }) => (
+      <Text style={styles.libraryAuthorHeader}>{section.title}</Text>
+    ),
+    [styles.libraryAuthorHeader],
+  );
+
   const listEmptyComponent = (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyStateText}>
-        No writings available yet. Add XHTML files to `assets/writings`
-        and run `npm run process:writings` to generate the library.
-      </Text>
+      <Text style={styles.emptyStateText}>No writings available yet.</Text>
     </View>
   );
 
@@ -46,15 +80,17 @@ export default function LibraryScreen({
         ),
       }}
     >
-      <FlatList
-        data={writings}
+      <SectionList
+        sections={sections}
         keyExtractor={item => item.id}
         style={styles.homeList}
         contentContainerStyle={
-          writings.length === 0 ? styles.homeListEmpty : styles.homeListContent
+          sections.length === 0 ? styles.homeListEmpty : styles.homeListContent
         }
         renderItem={renderWritingItem}
+        renderSectionHeader={renderSectionHeader}
         ListEmptyComponent={listEmptyComponent}
+        stickySectionHeadersEnabled={false}
       />
     </BaseScreen>
   );
