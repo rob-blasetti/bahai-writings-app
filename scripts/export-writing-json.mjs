@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile, mkdir } from 'fs/promises';
+import { createHash } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { load } from 'cheerio';
@@ -122,6 +123,20 @@ function collectInlineText($, node) {
   return normalizeWhitespace($node.text());
 }
 
+function collectAnchorIds($, $el) {
+  const ids = new Set();
+  const ownId = $el.attr('id');
+  if (ownId) ids.add(ownId);
+
+  $el.find('a[id]').each((_, a) => {
+    const id = $(a).attr('id');
+    if (id) ids.add(id);
+  });
+
+  return ids.size > 0 ? Array.from(ids).sort((a, b) => a.localeCompare(b)) : null;
+}
+
+
 function collectBlocks($, root) {
   const blocks = [];
 
@@ -155,7 +170,9 @@ function collectBlocks($, root) {
       }
 
       const type = name.startsWith('h') ? 'heading' : 'paragraph';
-      blocks.push({ type, text });
+      const sourceId = $el.attr('id') || null;
+      const anchorIds = collectAnchorIds($, $el);
+      blocks.push({ type, text, sourceId, anchorIds });
       return;
     }
 
@@ -252,9 +269,27 @@ function buildNotesMapFromBlocks(blocks) {
   };
 }
 
+function stableUnitId({ sourceId, anchorIds, type, text }) {
+  if (sourceId) {
+    return `src:${sourceId}`;
+  }
+  const anchor = Array.isArray(anchorIds) && anchorIds.length > 0 ? anchorIds[0] : null;
+  if (anchor) {
+    return `a:${anchor}`;
+  }
+  const hash = createHash('sha1')
+    .update(String(type ?? ''))
+    .update('\n')
+    .update(String(text ?? ''))
+    .digest('hex')
+    .slice(0, 12);
+  return `h:${hash}`;
+}
+
 function makeUnitId(index) {
   return `p:${String(index).padStart(6, '0')}`;
 }
+
 
 
 function convertNumericHeadings(blocks) {
@@ -286,14 +321,20 @@ function buildToc(units) {
     const startIndex = Math.min(current.index + 1, units.length - 1);
     const endIndex = next ? Math.max(next.index - 1, startIndex) : units.length - 1;
 
-    const start = units[startIndex]?.id ?? units[current.index]?.id;
-    const end = units[endIndex]?.id ?? start;
+    const startUnit = units[startIndex] ?? units[current.index];
+    const endUnit = units[endIndex] ?? startUnit;
+    const start = startUnit?.id;
+    const end = endUnit?.id;
+    const startPos = startUnit?.pos ?? null;
+    const endPos = endUnit?.pos ?? startPos;
 
     toc.push({
       id: `sec:${slugify(current.title) || String(i + 1).padStart(3, '0')}`,
       title: current.title,
       start,
       end,
+      startPos,
+      endPos,
     });
   }
 
@@ -351,7 +392,8 @@ async function main() {
 
   const units = dedupeAdjacentHeadings(
     normalizedBlocks.map((block, index) => ({
-      id: makeUnitId(index + 1),
+      id: stableUnitId({ sourceId: block.sourceId, anchorIds: block.anchorIds, type: block.type, text: block.text }),
+      pos: index + 1,
       type: block.type,
       text: block.text,
     })),
