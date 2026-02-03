@@ -510,8 +510,8 @@ async function exportOne({ fileName, outPath, version }) {
 
   const normalizedBlocks = convertNumericHeadings(promoteStandaloneHeadings(contentBlocks));
 
-  const units = dedupeAdjacentHeadings((() => {
-    const out = [];
+  const units = (() => {
+    const rawUnits = [];
 
     for (let index = 0; index < normalizedBlocks.length; index += 1) {
       const block = normalizedBlocks[index];
@@ -520,7 +520,7 @@ async function exportOne({ fileName, outPath, version }) {
       // Skip citation-marker-only blocks like "[1]"; attach to previous unit instead.
       const markerMatch = text.match(/^\[(\d+)\]$/);
       if (markerMatch) {
-        const prev = out[out.length - 1];
+        const prev = rawUnits[rawUnits.length - 1];
         if (prev) {
           prev.refNoteIds = Array.isArray(prev.refNoteIds) ? prev.refNoteIds : [];
           if (!prev.refNoteIds.includes(markerMatch[1])) {
@@ -530,8 +530,7 @@ async function exportOne({ fileName, outPath, version }) {
         continue;
       }
 
-      out.push({
-        id: makeUnitId(index + 1),
+      rawUnits.push({
         stableId: stableUnitId({
           sourceId: block.sourceId,
           anchorIds: block.anchorIds,
@@ -544,8 +543,14 @@ async function exportOne({ fileName, outPath, version }) {
       });
     }
 
-    return out;
-  })());
+    // Dedupe before assigning ids so ids remain contiguous.
+    const deduped = dedupeAdjacentHeadings(rawUnits);
+
+    return deduped.map((unit, idx) => ({
+      id: makeUnitId(idx + 1),
+      ...unit,
+    }));
+  })();
 
   const work = {
     workId: meta.id,
