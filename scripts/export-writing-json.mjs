@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
+import { createHash } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { load } from 'cheerio';
@@ -48,13 +49,51 @@ const INLINE_UNWRAP_TAGS = new Set([
   'sub',
   'font',
 ]);
+function stableUnitId({ sourceId, anchorIds, type, text }) {
+  if (sourceId) return `src:${sourceId}`;
+  const anchor = Array.isArray(anchorIds) && anchorIds.length > 0 ? anchorIds[0] : null;
+  if (anchor) return `a:${anchor}`;
+  const hash = createHash('sha1')
+    .update(String(type ?? ''))
+    .update('\n')
+    .update(String(text ?? ''))
+    .digest('hex')
+    .slice(0, 12);
+  return `h:${hash}`;
+}
+
+function isSubtitleHeading(title) {
+  const t = String(title ?? '').trim();
+  return /^\(.+\)$/.test(t);
+}
+
+function extractNavToc($) {
+  const entries = [];
+  const seen = new Set();
+
+  $('body')
+    .find('nav a[href^="#"]')
+    .each((_, el) => {
+      const href = $(el).attr('href') || '';
+      const id = href.startsWith('#') ? href.slice(1).trim() : '';
+      const title = normalizeWhitespace($(el).text());
+      if (!id || id === '#' || !title) return;
+      if (/^list of sections$/i.test(title)) return;
+      if (seen.has(id)) return;
+      seen.add(id);
+      entries.push({ id, title });
+    });
+
+  return entries;
+}
+
 
 function prepareDocument($) {
   const body = $('body');
 
   body.find('script, style, link, svg, noscript').remove();
   body.find('div.wf').remove();
-  body.find('nav').remove();
+  // nav removal handled after TOC extraction
 
   // Remove footnote back-links
   body.find('a.jc').remove();
@@ -271,6 +310,29 @@ function convertNumericHeadings(blocks) {
   });
 }
 
+function shouldPromoteParagraphToHeading(text) {
+  const t = String(text ?? '').trim();
+  if (!t) return false;
+  if (t.length > 80) return false;
+  if (/^[\d.]+$/.test(t)) return false;
+  if (/^[IVXLCDM]+$/i.test(t)) return true;
+  if (/^[A-Z][A-Z\s\-’’]+$/.test(t) && t.length >= 6) return true;
+  if (!/[.!?]$/.test(t) && /\p{L}/u.test(t)) {
+    const words = t.split(/\s+/);
+    if (words.length >= 2 && words.length <= 10) return true;
+  }
+  return false;
+}
+
+function promoteStandaloneHeadings(blocks) {
+  return blocks.map(block => {
+    if (block.type === 'paragraph' && shouldPromoteParagraphToHeading(block.text)) {
+      return { ...block, type: 'heading' };
+    }
+    return block;
+  });
+}
+
 function buildToc(units) {
   const toc = [];
 
@@ -279,9 +341,9 @@ function buildToc(units) {
     const unit = units[i];
     if (unit.type === 'heading') {
       const title = String(unit.text ?? '').trim();
-      if (title) {
-        headings.push({ index: i, title });
-      }
+      if (!title) continue;
+      if (isSubtitleHeading(title)) continue;
+      headings.push({ index: i, title });
     }
   }
 
@@ -291,14 +353,48 @@ function buildToc(units) {
     const startIndex = current.index;
     const endIndex = next ? Math.max(next.index - 1, startIndex) : units.length - 1;
 
-    const start = units[startIndex]?.id ?? units[current.index]?.id;
-    const end = units[endIndex]?.id ?? start;
+    toc.push({
+      id: `sec:${slugify(current.title) || String(i + 1).padStart(3, '0')}`,
+      title: current.title,
+      start: units[startIndex].id,
+      end: units[endIndex].id,
+    });
+  }
+
+  return toc;
+}
+
+function buildTocFromNav(navEntries, units) {
+  if (!Array.isArray(navEntries) || navEntries.length === 0) return null;
+
+  const anchorToIndex = new Map();
+  for (let i = 0; i < units.length; i += 1) {
+    const anchors = units[i].sourceAnchorIds;
+    if (Array.isArray(anchors)) {
+      for (const a of anchors) {
+        if (!anchorToIndex.has(a)) anchorToIndex.set(a, i);
+      }
+    }
+  }
+
+  const resolved = navEntries
+    .map(entry => ({ ...entry, index: anchorToIndex.get(entry.id) }))
+    .filter(entry => typeof entry.index === 'number');
+
+  if (resolved.length === 0) return null;
+
+  const toc = [];
+  for (let i = 0; i < resolved.length; i += 1) {
+    const current = resolved[i];
+    const next = resolved[i + 1];
+    const startIndex = current.index;
+    const endIndex = next ? Math.max(next.index - 1, startIndex) : units.length - 1;
 
     toc.push({
       id: `sec:${slugify(current.title) || String(i + 1).padStart(3, '0')}`,
       title: current.title,
-      start,
-      end,
+      start: units[startIndex].id,
+      end: units[endIndex].id,
     });
   }
 
@@ -329,7 +425,9 @@ async function exportOne({ fileName, outPath, version }) {
   const $ = load(markup, { decodeEntities: true });
 
   const meta = extractMetadata($, fileName);
+  const navTocEntries = extractNavToc($);
   prepareDocument($);
+  $("body").find("nav").remove();
 
   const domNotes = extractNotesFromDom($);
 
@@ -337,13 +435,15 @@ async function exportOne({ fileName, outPath, version }) {
   const { notesStartIndex } = buildNotesMapFromBlocks(rawBlocks);
   const contentBlocks = notesStartIndex > 0 ? rawBlocks.slice(0, notesStartIndex) : rawBlocks;
 
-  const normalizedBlocks = convertNumericHeadings(contentBlocks);
+  const normalizedBlocks = convertNumericHeadings(promoteStandaloneHeadings(contentBlocks));
 
   const units = dedupeAdjacentHeadings(
     normalizedBlocks.map((block, index) => ({
       id: makeUnitId(index + 1),
+      stableId: stableUnitId({ sourceId: block.sourceId, anchorIds: block.anchorIds, type: block.type, text: block.text }),
       type: block.type,
       text: block.text,
+      sourceAnchorIds: block.anchorIds,
     })),
   );
 
@@ -357,7 +457,7 @@ async function exportOne({ fileName, outPath, version }) {
       language: 'en',
       sourceFile: fileName,
     },
-    toc: buildToc(units),
+    toc: buildTocFromNav(navTocEntries, units) || buildToc(units),
     units,
     notes: domNotes || {},
   };
