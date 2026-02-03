@@ -314,7 +314,9 @@ function extractNotesFromDom($) {
   // In the Bahá’í Reference Library DOM, each note is typically contained in `li > div`.
   notesContainer.find('li > div').each((_, el) => {
     const raw = normalizeWhitespace($(el).text());
-    const match = raw.match(/^\[(\d+)\]\s*(.*)$/s);
+
+    // Notes sometimes appear as "[1] text..." or "1 text..." depending on the file.
+    const match = raw.match(/^\[(\d+)\]\s*(.*)$/s) || raw.match(/^(\d+)\s+(.*)$/s);
     if (!match) {
       return;
     }
@@ -510,28 +512,48 @@ async function exportOne({ fileName, outPath, version }) {
 
   const normalizedBlocks = convertNumericHeadings(promoteStandaloneHeadings(contentBlocks));
 
-  const units = dedupeAdjacentHeadings((() => {
-    const out = [];
+  const units = (() => {
+    const notesMap = domNotes || {};
+    const rawUnits = [];
 
     for (let index = 0; index < normalizedBlocks.length; index += 1) {
       const block = normalizedBlocks[index];
       const text = String(block.text ?? '').trim();
 
-      // Skip citation-marker-only blocks like "[1]"; attach to previous unit instead.
+      // Handle citation-marker-only blocks like "[1]".
+      // - If the marker matches an extracted note, attach it to the previous unit.
+      // - Otherwise treat it as a structural number (not a note) so we don't lose content.
       const markerMatch = text.match(/^\[(\d+)\]$/);
       if (markerMatch) {
-        const prev = out[out.length - 1];
-        if (prev) {
-          prev.refNoteIds = Array.isArray(prev.refNoteIds) ? prev.refNoteIds : [];
-          if (!prev.refNoteIds.includes(markerMatch[1])) {
-            prev.refNoteIds.push(markerMatch[1]);
+        const marker = markerMatch[1];
+
+        if (Object.prototype.hasOwnProperty.call(notesMap, marker)) {
+          const prev = rawUnits[rawUnits.length - 1];
+          if (prev) {
+            prev.refNoteIds = Array.isArray(prev.refNoteIds) ? prev.refNoteIds : [];
+            if (!prev.refNoteIds.includes(marker)) {
+              prev.refNoteIds.push(marker);
+            }
           }
+          continue;
         }
+
+        rawUnits.push({
+          stableId: stableUnitId({
+            sourceId: block.sourceId,
+            anchorIds: block.anchorIds,
+            type: 'partNumber',
+            text: marker,
+          }),
+          type: 'partNumber',
+          text: marker,
+          sourceAnchorIds: block.anchorIds,
+        });
+
         continue;
       }
 
-      out.push({
-        id: makeUnitId(index + 1),
+      rawUnits.push({
         stableId: stableUnitId({
           sourceId: block.sourceId,
           anchorIds: block.anchorIds,
@@ -544,8 +566,14 @@ async function exportOne({ fileName, outPath, version }) {
       });
     }
 
-    return out;
-  })());
+    // Dedupe before assigning ids so ids remain contiguous.
+    const deduped = dedupeAdjacentHeadings(rawUnits);
+
+    return deduped.map((unit, idx) => ({
+      id: makeUnitId(idx + 1),
+      ...unit,
+    }));
+  })();
 
   const work = {
     workId: meta.id,
