@@ -67,6 +67,20 @@ function isSubtitleHeading(title) {
   return /^\(.+\)$/.test(t);
 }
 
+function isNoiseHeading(title) {
+  const t = String(title ?? '').trim();
+  if (!t) return true;
+
+  // Avoid promoting / including bylines and translator credit lines in TOC.
+  if (/^by\b/i.test(t)) return true;
+  if (/^translated\b/i.test(t)) return true;
+  if (/^compiled\b/i.test(t)) return true;
+  if (/^edited\b/i.test(t)) return true;
+  if (/^editor\b/i.test(t)) return true;
+
+  return false;
+}
+
 function extractNavToc($) {
   const entries = [];
   const seen = new Set();
@@ -315,6 +329,13 @@ function shouldPromoteParagraphToHeading(text) {
   if (!t) return false;
   if (t.length > 80) return false;
   if (/^[\d.]+$/.test(t)) return false;
+
+  // Avoid promoting things like "by Bahá’u’lláh" / "Translated by ..." into headings.
+  if (isNoiseHeading(t)) return false;
+
+  // A lot of bylines start lowercase; real headings usually don't.
+  if (/^[a-z]/.test(t)) return false;
+
   if (/^[IVXLCDM]+$/i.test(t)) return true;
   if (/^[A-Z][A-Z\s\-’’]+$/.test(t) && t.length >= 6) return true;
   if (!/[.!?]$/.test(t) && /\p{L}/u.test(t)) {
@@ -343,6 +364,7 @@ function buildToc(units) {
       const title = String(unit.text ?? '').trim();
       if (!title) continue;
       if (isSubtitleHeading(title)) continue;
+      if (isNoiseHeading(title)) continue;
       headings.push({ index: i, title });
     }
   }
