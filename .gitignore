@@ -84,3 +84,6 @@ yarn.lock.*
 
 # Allow committed template
 !.env.example
+
+# Generated exports (flat units schema)
+assets/exports/
