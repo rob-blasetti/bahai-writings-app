@@ -37,6 +37,7 @@ import {
 } from '../writings/collectionUtils';
 import { getShareableBlockText } from '../sharing/shareUtils';
 import { useBlockRenderer } from '../writings/useBlockRenderer';
+import { getWork, listWorks } from '../writings/worksService';
 import { appStyles } from '../styles/components';
 
 const styles = appStyles;
@@ -55,26 +56,13 @@ function AppContent() {
   const safeAreaInsets = useSafeAreaInsets();
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
-  const writings = useMemo(
-    () => (writingsManifest?.items ?? []).filter(item => item.text?.length),
-    [],
-  );
-  const writingsWithCollections = useMemo(
-    () =>
-      writings.map(writing => ({
-        ...writing,
-        collectionKey: inferCollectionKey(writing),
-      })),
-    [writings],
-  );
-  const enrichedWritings = useMemo(
-    () =>
-      writingsWithCollections.map(writing => ({
-        ...writing,
-        sectionsData: getSectionsForWriting(writing),
-      })),
-    [writingsWithCollections],
-  );
+  const [remoteWorks, setRemoteWorks] = useState([]);
+  const [worksLoaded, setWorksLoaded] = useState(false);
+  const [worksError, setWorksError] = useState(null);
+
+  // Legacy local writings manifest remains in the codebase, but the primary library
+  // is now backed by the Liquid Spirit backend Works collection.
+  const enrichedWritings = useMemo(() => [], []);
 
   const {
     user: authenticatedUser,
@@ -154,6 +142,39 @@ function AppContent() {
     goBack,
   } = useAppNavigation();
   const isInAppFlow = authMode === 'user' || authMode === 'guest';
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadWorks = async () => {
+      if (!isInAppFlow) {
+        return;
+      }
+
+      try {
+        setWorksError(null);
+        const token = authenticatedUser?.token ?? null;
+        const works = await listWorks({ token });
+        if (isMounted) {
+          setRemoteWorks(works);
+          setWorksLoaded(true);
+        }
+      } catch (error) {
+        console.warn('[Works] Unable to fetch works list', error);
+        if (isMounted) {
+          setWorksError(error?.message ?? 'Unable to load works');
+          setWorksLoaded(true);
+        }
+      }
+    };
+
+    loadWorks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authenticatedUser?.token, isInAppFlow]);
+
   const [activeCollectionKey, setActiveCollectionKey] = useState(null);
   const [selectedWritingId, setSelectedWritingId] = useState(null);
   const [selectedSectionId, setSelectedSectionId] = useState(null);
@@ -233,46 +254,35 @@ function AppContent() {
     }),
     [fontScale],
   );
-  const collectionCounts = useMemo(() => {
-    const counts = WRITING_COLLECTIONS.reduce((acc, collection) => {
-      acc[collection.key] = 0;
-      return acc;
-    }, {});
-    enrichedWritings.forEach(writing => {
-      const key = writing.collectionKey;
-      if (key && Object.prototype.hasOwnProperty.call(counts, key)) {
-        counts[key] += 1;
-      }
-    });
-    return counts;
-  }, [enrichedWritings]);
   const collectionOptions = useMemo(
-    () =>
-      WRITING_COLLECTIONS.map(collection => ({
-        ...collection,
-        count: collectionCounts[collection.key] ?? 0,
-      })),
-    [collectionCounts],
+    () => [
+      {
+        key: 'works',
+        label: 'Writings Library',
+        count: remoteWorks.length,
+      },
+    ],
+    [remoteWorks.length],
   );
+
   const activeCollection = useMemo(
+    () => ({ key: 'works', label: 'Writings Library', count: remoteWorks.length }),
+    [remoteWorks.length],
+  );
+
+  const scopedWritings = useMemo(
     () =>
-      WRITING_COLLECTIONS.find(
-        collection => collection.key === activeCollectionKey,
-      ) ?? null,
-    [activeCollectionKey],
+      remoteWorks.map(work => ({
+        id: work.workId,
+        title: work.title,
+        author: work.author,
+        language: work.language,
+        version: work.version,
+        toc: work.toc,
+      })),
+    [remoteWorks],
   );
-  const scopedWritings = useMemo(() => {
-    if (!activeCollectionKey) {
-      return enrichedWritings;
-    }
-    return enrichedWritings.filter(
-      writing => writing.collectionKey === activeCollectionKey,
-    );
-  }, [activeCollectionKey, enrichedWritings]);
-  const searchableSections = useMemo(
-    () => buildSearchableSections(scopedWritings),
-    [scopedWritings],
-  );
+  const searchableSections = useMemo(() => [], []);
   const windowWidth = Dimensions.get('window').width;
   const horizontalInsets =
     (safeAreaInsets.left ?? 0) + (safeAreaInsets.right ?? 0);
@@ -336,31 +346,24 @@ function AppContent() {
       shareThemes.find(theme => theme.id === shareThemeId) ?? shareThemes[0]
     );
   }, [shareThemeId, shareThemes]);
-  const selectedWriting = useMemo(
-    () =>
-      scopedWritings.find(item => item.id === selectedWritingId) ?? null,
-    [selectedWritingId, scopedWritings],
-  );
-  const writingSections = useMemo(
-    () => selectedWriting?.sectionsData ?? [],
-    [selectedWriting],
-  );
-  const availablePassages = useMemo(
-    () =>
-      scopedWritings.flatMap(writing =>
-        writing.sectionsData.flatMap(section =>
-          section.blocks.map((block, blockIndex) => ({
-            writingId: writing.id,
-            writingTitle: writing.title,
-            sectionId: section.id,
-            sectionTitle: section.title,
-            block,
-            blockIndex,
-          })),
-        ),
-      ),
-    [scopedWritings],
-  );
+  const [selectedWork, setSelectedWork] = useState(null);
+
+  const selectedWriting = useMemo(() => selectedWork, [selectedWork]);
+
+  const writingSections = useMemo(() => {
+    if (!selectedWork) return [];
+    const toc = Array.isArray(selectedWork.toc) ? selectedWork.toc : [];
+    return toc.map(item => ({
+      id: item.id,
+      title: item.title,
+      start: item.start,
+      end: item.end,
+    }));
+  }, [selectedWork]);
+
+  // Random passage / search features still rely on local parsing. Disable for now in
+  // works-backed mode (we'll reintroduce later via a search endpoint).
+  const availablePassages = useMemo(() => [], []);
   const programCount = programPassages.length;
   const hasProgramPassages = programCount > 0;
   const programBackButtonLabel = useMemo(() => {
@@ -447,14 +450,47 @@ function AppContent() {
     };
   }, [selectedSectionId, sectionPageWidth]);
 
-  const handleSelectWriting = writingId => {
-    setSelectedWritingId(writingId);
-    navigateToScreen('writing');
-  };
+  const handleSelectWriting = useCallback(
+    async writingId => {
+      const workId = String(writingId ?? '').trim();
+      if (!workId) {
+        return;
+      }
+
+      setSelectedWritingId(workId);
+      setSelectedSectionId(null);
+      setRandomPassage(null);
+
+      try {
+        const token = authenticatedUser?.token ?? null;
+        const work = await getWork(workId, { token });
+        setSelectedWork(
+          work
+            ? {
+                id: work.workId,
+                workId: work.workId,
+                title: work.title,
+                author: work.author,
+                language: work.language,
+                version: work.version,
+                toc: work.toc,
+              }
+            : null,
+        );
+      } catch (error) {
+        console.warn('[Works] Unable to load work', { workId, error });
+        setSelectedWork(null);
+      }
+
+      navigateToScreen('writing');
+    },
+    [authenticatedUser?.token, navigateToScreen],
+  );
 
   const handleSelectSection = sectionId => {
     setSelectedSectionId(sectionId);
-    navigateToScreen('section');
+    // Works-backed reader
+    navigateToScreen('workSection');
   };
 
   const activateSearchHighlight = useCallback(
@@ -690,7 +726,8 @@ function AppContent() {
   };
 
   const handleOpenCollections = () => {
-    navigateToScreen('collections');
+    // Works-backed experience: go straight to library list.
+    navigateToScreen('home');
   };
 
   const handleSelectCollection = collectionKey => {

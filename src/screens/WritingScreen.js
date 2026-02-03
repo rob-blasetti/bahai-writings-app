@@ -12,8 +12,12 @@ export default function WritingScreen({
 }) {
   const renderSectionItem = useCallback(
     ({ item, index }) => {
-      const blockCount = item.blocks.length;
+      const hasBlocks = Array.isArray(item.blocks);
+      const blockCount = hasBlocks ? item.blocks.length : 0;
       const blockLabel = blockCount === 1 ? 'passage' : 'passages';
+      const rangeLabel =
+        item?.start && item?.end ? `${item.start} → ${item.end}` : null;
+
       return (
         <TouchableOpacity
           onPress={() => onSelectSection(item.id)}
@@ -23,7 +27,7 @@ export default function WritingScreen({
             {index + 1}. {item.title}
           </Text>
           <Text style={styles.sectionRowDescription}>
-            {blockCount} {blockLabel}
+            {hasBlocks ? `${blockCount} ${blockLabel}` : rangeLabel || 'Tap to read'}
           </Text>
         </TouchableOpacity>
       );
