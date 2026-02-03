@@ -673,9 +673,9 @@ async function collectXhtmlFiles(dir = writingsDirectory) {
   return files.sort((a, b) => a.localeCompare(b));
 }
 
-async function buildManifest() {
+async function buildManifest({ files = null } = {}) {
   const items = [];
-  const xhtmlFiles = await collectXhtmlFiles();
+  const xhtmlFiles = files ?? (await collectXhtmlFiles());
 
   for (const fileName of xhtmlFiles) {
     try {
@@ -694,7 +694,33 @@ async function buildManifest() {
 }
 
 async function main() {
+  const args = process.argv.slice(2);
+  const fileFlagIndex = args.indexOf('--file');
+  const outFlagIndex = args.indexOf('--out');
+  const requestedFile = fileFlagIndex >= 0 ? args[fileFlagIndex + 1] : null;
+  const requestedOut = outFlagIndex >= 0 ? args[outFlagIndex + 1] : null;
+
   await ensureOutputDirectory();
+
+  if (requestedFile) {
+    const writing = await readWritingFile(requestedFile);
+    const singleManifest = {
+      generatedAt: new Date().toISOString(),
+      items: [writing],
+    };
+
+    const outPath = requestedOut
+      ? path.resolve(process.cwd(), requestedOut)
+      : path.join(
+          outputDirectory,
+          `${path.basename(requestedFile, path.extname(requestedFile))}.json`,
+        );
+
+    await writeFile(outPath, JSON.stringify(singleManifest, null, 2));
+    console.log(`Wrote 1 item(s) to ${path.relative(process.cwd(), outPath)}`);
+    return;
+  }
+
   const manifest = await buildManifest();
   await writeFile(outputFile, JSON.stringify(manifest, null, 2));
   console.log(
