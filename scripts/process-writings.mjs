@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { mkdir, readdir, readFile, writeFile } from 'fs/promises';
+import { createHash } from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { load } from 'cheerio';
@@ -58,6 +59,24 @@ function normalizeWhitespace(text) {
     .replace(/\n{3,}/g, '\n\n')
     .trim();
 }
+
+function stableBlockId({ sourceId, anchorIds, type, text }) {
+  if (sourceId) {
+    return `src:${sourceId}`;
+  }
+  const anchor = Array.isArray(anchorIds) && anchorIds.length > 0 ? anchorIds[0] : null;
+  if (anchor) {
+    return `a:${anchor}`;
+  }
+  const hash = createHash('sha1')
+    .update(String(type ?? ''))
+    .update('\n')
+    .update(String(text ?? ''))
+    .digest('hex')
+    .slice(0, 12);
+  return `h:${hash}`;
+}
+
 
 function slugify(value) {
   if (!value) {
@@ -278,7 +297,7 @@ function collectAnchorIds($, element) {
       }
     });
 
-  return ids.size > 0 ? Array.from(ids) : null;
+  return ids.size > 0 ? Array.from(ids).sort((a, b) => a.localeCompare(b)) : null;
 }
 
 function collectBlocks($, root) {
@@ -312,7 +331,6 @@ function collectBlocks($, root) {
     ) {
       const rawText = normalizeWhitespace(collectInlineText($, node));
       const sourceId = $el.attr('id') || null;
-      const sourceClass = $el.attr('class') || '';
       const anchorIds = collectAnchorIds($, $el);
 
       if (rawText.length === 0 && !isSeparator) {
@@ -330,12 +348,11 @@ function collectBlocks($, root) {
         : 'paragraph';
 
       blocks.push({
-        id: sourceId || `block-${counter}`,
+        id: stableBlockId({ sourceId, anchorIds, type, text: rawText }),
         type,
         text: rawText,
         sourceId,
         sourceTag: name,
-        sourceClass,
         level: headingLevel,
         anchorIds,
       });
@@ -429,7 +446,15 @@ function postProcessBlocks(blocks) {
     block => !(block.type === 'heading' && block.level === 1),
   );
 
-  return combineNumberedParagraphs(formatNumberedParagraphs(withoutTitle));
+  const processed = combineNumberedParagraphs(formatNumberedParagraphs(withoutTitle));
+
+  // Treat numeric-only headings (e.g. '1', '2') as part markers rather than headings.
+  return processed.map(block => {
+    if (block.type === 'heading' && /^\d+$/.test(block.text.trim())) {
+      return { ...block, type: 'partNumber' };
+    }
+    return block;
+  });
 }
 
 function buildSectionsFromToc(
@@ -610,8 +635,88 @@ function buildSections({
 }
 
 function stripInternalFields(block) {
-  const { anchorIds, level, ...rest } = block;
+  const { anchorIds, level, sourceId, ...rest } = block;
   return rest;
+}
+
+function buildNotesMapFromBlocks(blocks) {
+  if (!Array.isArray(blocks) || blocks.length === 0) {
+    return { notes: null, notesStartIndex: -1 };
+  }
+
+  const notesHeadingIndex = blocks.findIndex(
+    block =>
+      block?.type === 'heading' && /^notes?$/i.test(String(block.text ?? '').trim()),
+  );
+  if (notesHeadingIndex < 0) {
+    return { notes: null, notesStartIndex: -1 };
+  }
+
+  const notesBlocks = blocks.slice(notesHeadingIndex + 1);
+  const content = notesBlocks.map(block => block.text).join('\n\n');
+
+  const notes = {};
+  const pattern = /\[(\d+)\]([^\[]+)/g;
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    const key = match[1];
+    const value = normalizeWhitespace(match[2]);
+    if (key && value) {
+      notes[key] = value;
+    }
+  }
+
+  return {
+    notes: Object.keys(notes).length > 0 ? notes : null,
+    notesStartIndex: notesHeadingIndex,
+  };
+}
+
+function buildNotesMapFromSection(section) {
+  if (!section || !Array.isArray(section.blocks)) {
+    return null;
+  }
+  const content = section.blocks.map(block => block.text).join('\n\n');
+  const notes = {};
+  const pattern = /\[(\d+)\]([^\[]+)/g;
+  let match;
+  while ((match = pattern.exec(content)) !== null) {
+    const key = match[1];
+    const value = normalizeWhitespace(match[2]);
+    if (key && value) {
+      notes[key] = value;
+    }
+  }
+  return Object.keys(notes).length > 0 ? notes : null;
+}
+
+function dedupeSections(sections) {
+  const seen = new Set();
+  const result = [];
+
+  for (const section of sections) {
+    const titleKey = String(section.title ?? '').trim().toLowerCase();
+    const sample = Array.isArray(section.blocks)
+      ? section.blocks
+          .slice(0, 3)
+          .map(block => String(block.text ?? '').trim())
+          .join('\n')
+      : '';
+
+    const fingerprint = createHash('sha1')
+      .update(titleKey)
+      .update('\n')
+      .update(sample)
+      .digest('hex');
+
+    if (seen.has(fingerprint)) {
+      continue;
+    }
+    seen.add(fingerprint);
+    result.push(section);
+  }
+
+  return result;
 }
 
 async function readWritingFile(fileName) {
@@ -626,7 +731,9 @@ async function readWritingFile(fileName) {
 
   const rawBlocks = collectBlocks($, $('body'));
   const blocks = postProcessBlocks(rawBlocks);
-  const normalizedText = normalizeWhitespace(blocks.map(block => block.text).join('\n\n'));
+
+  const { notes, notesStartIndex } = buildNotesMapFromBlocks(blocks);
+  const contentBlocks = notesStartIndex > 0 ? blocks.slice(0, notesStartIndex) : blocks;
   const writingId = slugify(metadata.id) || slugify(fileName.replace(/\.xhtml$/i, ''));
   const sections = buildSections({
     blocks,
@@ -639,14 +746,28 @@ async function readWritingFile(fileName) {
     blocks: section.blocks.map(stripInternalFields),
   }));
 
+  const dedupedSections = dedupeSections(sections);
+
+  const wordCount = contentBlocks.reduce((total, block) => {
+    const text = String(block.text ?? '').trim();
+    return total + (text ? text.split(/\s+/).length : 0);
+  }, 0);
+
+  const excerpt = normalizeWhitespace(
+    contentBlocks.slice(0, 6).map(block => block.text).join('\n\n'),
+  ).slice(0, 500);
+
   return {
     id: metadata.id,
     title: metadata.title,
     fileName,
     author: metadata.author,
     keywords: metadata.keywords,
-    text: normalizedText,
-    sections,
+    schemaVersion: 2,
+    excerpt,
+    wordCount,
+    notes,
+    sections: dedupedSections,
   };
 }
 
