@@ -8,7 +8,6 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import writingsManifest from '../../assets/generated/writings.json';
 import ReflectionModal from '../components/ReflectionModal';
 import BaseScreen from '../components/BaseScreen';
 import ToastNotification from '../components/ToastNotification';
@@ -22,19 +21,10 @@ import { useAuth } from '../auth/authContext';
 import { PROGRAM_FREQUENCY_OPTIONS } from '../programs/programUtils';
 import { useApp } from './appContext';
 import {
-  buildSearchableSections,
-  searchSectionsByTheme as findSectionsByTheme,
-} from '../writings/searchEngine';
-import {
   cleanBlockText,
   extractPassageSentences,
   selectRandomPassage,
 } from '../writings/passageUtils';
-import { getSectionsForWriting } from '../writings/writingParser';
-import {
-  WRITING_COLLECTIONS,
-  inferCollectionKey,
-} from '../writings/collectionUtils';
 import { getShareableBlockText } from '../sharing/shareUtils';
 import { useBlockRenderer } from '../writings/useBlockRenderer';
 import { getWork, listWorks } from '../writings/worksService';
@@ -57,12 +47,7 @@ function AppContent() {
   const [toastMessage, setToastMessage] = useState('');
   const [toastVisible, setToastVisible] = useState(false);
   const [remoteWorks, setRemoteWorks] = useState([]);
-  const [worksLoaded, setWorksLoaded] = useState(false);
-  const [worksError, setWorksError] = useState(null);
-
-  // Legacy local writings manifest remains in the codebase, but the primary library
-  // is now backed by the Liquid Spirit backend Works collection.
-  const enrichedWritings = useMemo(() => [], []);
+  const [worksLoadError, setWorksLoadError] = useState(null);
 
   const {
     user: authenticatedUser,
@@ -152,18 +137,16 @@ function AppContent() {
       }
 
       try {
-        setWorksError(null);
+        setWorksLoadError(null);
         const token = authenticatedUser?.token ?? null;
         const works = await listWorks({ token });
         if (isMounted) {
           setRemoteWorks(works);
-          setWorksLoaded(true);
         }
       } catch (error) {
         console.warn('[Works] Unable to fetch works list', error);
         if (isMounted) {
-          setWorksError(error?.message ?? 'Unable to load works');
-          setWorksLoaded(true);
+          setWorksLoadError(error?.message ?? 'Unable to load works');
         }
       }
     };
@@ -335,6 +318,12 @@ function AppContent() {
       setToastVisible(false);
     }, TOAST_DURATION_MS);
   }, []);
+
+  useEffect(() => {
+    if (worksLoadError) {
+      showToast(worksLoadError);
+    }
+  }, [showToast, worksLoadError]);
 
   useEffect(() => {
     return () => {
@@ -1043,10 +1032,8 @@ function AppContent() {
     [addProgramSections],
   );
 
-  const searchSectionsByTheme = useCallback(
-    (theme, options) => findSectionsByTheme(searchableSections, theme, options),
-    [searchableSections],
-  );
+  // Works-backed mode: theme search is not wired yet (requires remote index/search endpoint).
+  const searchSectionsByTheme = useCallback(() => [], []);
 
   const handleOpenProgram = () => {
     if (currentScreen === 'program') {
@@ -1187,7 +1174,7 @@ function AppContent() {
         styles={styles}
         variant="plain"
         includeBottomInset
-        style={{ alignItems: 'center', justifyContent: 'center' }}
+        style={styles.centerContent}
       >
         <ActivityIndicator color="#8c6239" />
       </BaseScreen>
