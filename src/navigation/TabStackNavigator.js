@@ -13,6 +13,7 @@ import ProgramScreen from '../screens/ProgramScreen';
 import WritingScreen from '../screens/WritingScreen';
 import SectionScreen from '../screens/SectionScreen';
 import PassageScreen from '../screens/PassageScreen';
+import WorkSectionScreen from '../screens/WorkSectionScreen';
 import UnavailableScreen from '../screens/UnavailableScreen';
 import { Stack } from './StackNavigator';
 import { getStackScreenOptions } from './stackOptions';
@@ -354,6 +355,32 @@ export default function TabStackNavigator({
                 writingSections={writingSections}
                 collectionLabel={activeCollection?.label ?? null}
                 onSelectSection={selectSection}
+              />
+            ) : (
+              <UnavailableScreen
+                styles={styles}
+                onBack={backToHome}
+                onOpenProgram={openProgram}
+                hasProgramPassages={hasProgramPassages}
+                programBadgeLabel={programBadgeLabel}
+              />
+            ),
+          )
+        }
+      </Stack.Screen>
+
+      <Stack.Screen name="workSection">
+        {() =>
+          renderScreenSurface(
+            selectedWriting && selectedSection ? (
+              <WorkSectionScreen
+                styles={styles}
+                scaledTypography={scaledTypography}
+                work={selectedWriting}
+                section={selectedSection}
+                token={authenticatedUser?.token ?? null}
+                renderBlockContent={renderBlockContent}
+                onBack={backToSections}
               />
             ) : (
               <UnavailableScreen
