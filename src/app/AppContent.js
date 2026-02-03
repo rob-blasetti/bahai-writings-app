@@ -113,8 +113,6 @@ function AppContent() {
     includeCurrentUserAsFacilitator,
     setIncludeCurrentUserAsFacilitator,
     programFieldErrors,
-    setProgramFieldErrors,
-    setProgramFieldError,
     clearProgramFieldError,
     isSubmittingProgram,
     programSubmissionError,
@@ -343,7 +341,10 @@ function AppContent() {
       scopedWritings.find(item => item.id === selectedWritingId) ?? null,
     [selectedWritingId, scopedWritings],
   );
-  const writingSections = selectedWriting?.sectionsData ?? [];
+  const writingSections = useMemo(
+    () => selectedWriting?.sectionsData ?? [],
+    [selectedWriting],
+  );
   const availablePassages = useMemo(
     () =>
       scopedWritings.flatMap(writing =>
@@ -558,6 +559,7 @@ function AppContent() {
       sectionPageWidth,
       selectedSectionId,
       selectedWritingId,
+      navigateToScreen,
     ],
   );
 
@@ -999,23 +1001,11 @@ function AppContent() {
   };
   const handleRemoveCurrentUserFacilitator = useCallback(() => {
     setIncludeCurrentUserAsFacilitator(false);
-  }, []);
+  }, [setIncludeCurrentUserAsFacilitator]);
 
   const handleRestoreCurrentUserFacilitator = useCallback(() => {
     setIncludeCurrentUserAsFacilitator(true);
-  }, []);
-  const resetProgramMetadata = useCallback(() => {
-    setProgramTitle('');
-    setProgramNotes('');
-    setProgramSessionDate('');
-    setProgramSessionTime('');
-    setProgramTimeZone(defaultProgramTimeZone);
-    setProgramFrequency(PROGRAM_FREQUENCY_OPTIONS[0].id);
-    setProgramParticipants('');
-    setProgramFacilitators('');
-    setIncludeCurrentUserAsFacilitator(true);
-    setProgramFieldErrors({});
-  }, [defaultProgramTimeZone]);
+  }, [setIncludeCurrentUserAsFacilitator]);
 
   const handleRemoveFromMyVerses = verseId => {
     removeVerse(verseId);
