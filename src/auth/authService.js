@@ -1,18 +1,8 @@
 import { API_URL } from '../../config';
+import { normalizeBaseUrl } from '../utils/urlUtils';
 
 const DEFAULT_AUTH_ENDPOINT =
   'https://liquidspirit.example.com/api/kali/login-ls';
-
-const normalizeBaseUrl = value => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
-};
 
 const resolveAuthEndpoint = () => {
   if (global?.LIQUID_SPIRIT_AUTH_ENDPOINT) {

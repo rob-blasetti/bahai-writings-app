@@ -1,24 +1,14 @@
 import { API_URL } from '../../config';
-
-const normalizeBaseUrl = value => {
-  if (typeof value !== 'string') {
-    return null;
-  }
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  return trimmed.endsWith('/') ? trimmed.slice(0, -1) : trimmed;
-};
+import { normalizeBaseUrl } from '../utils/urlUtils';
 
 export const resolveDevotionalEndpoint = () => {
+  if (global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT) {
+    return global.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT;
+  }
+
   const normalizedBase = normalizeBaseUrl(API_URL);
   if (normalizedBase) {
     return `${normalizedBase}/api/kali/create/devotional`;
-  }
-
-  if (global?.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT) {
-    return global.LIQUID_SPIRIT_DEVOTIONAL_ENDPOINT;
   }
 
   return null;
@@ -45,17 +35,19 @@ export async function createDevotionalActivity(payload = {}, options = {}) {
     headers.Authorization = `Bearer ${token}`;
   }
 
-  console.log('[DevotionalService] submitting devotional', {
-    endpoint,
-    hasToken: Boolean(token),
-    payloadSummary: {
-      title: payload.title,
-      passageCount: Array.isArray(payload.passages) ? payload.passages.length : 0,
-      sessionDate: payload.sessionDate,
-      timeZone: payload.timeZone,
-      frequency: payload.frequency,
-    },
-  });
+  if (__DEV__) {
+    console.log('[DevotionalService] submitting devotional', {
+      endpoint,
+      hasToken: Boolean(token),
+      payloadSummary: {
+        title: payload.title,
+        passageCount: Array.isArray(payload.passages) ? payload.passages.length : 0,
+        sessionDate: payload.sessionDate,
+        timeZone: payload.timeZone,
+        frequency: payload.frequency,
+      },
+    });
+  }
 
   let response;
   try {
@@ -91,10 +83,13 @@ export async function createDevotionalActivity(payload = {}, options = {}) {
     });
     throw new Error(message);
   }
-  console.log('[DevotionalService] submission succeeded', {
-    endpoint,
-    responseBody,
-  });
+
+  if (__DEV__) {
+    console.log('[DevotionalService] submission succeeded', {
+      endpoint,
+      responseBody,
+    });
+  }
 
   return responseBody;
 }
