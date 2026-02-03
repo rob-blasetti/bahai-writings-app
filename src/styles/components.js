@@ -617,6 +617,57 @@ export const appStyles = StyleSheet.create({
     fontSize: 14,
     color: '#3b2a15',
   },
+  recentCommentsWrapper: {
+    marginTop: 24,
+    marginBottom: 12,
+  },
+  recentCommentsHeader: {
+    marginBottom: 12,
+  },
+  recentCommentsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#2c1f0c',
+  },
+  recentCommentsSubtitle: {
+    marginTop: 4,
+    fontSize: 13,
+    color: '#6f5a35',
+  },
+  recentCommentsListContent: {
+    paddingRight: 16,
+  },
+  recentCommentCard: {
+    width: 260,
+    borderWidth: 1,
+    borderColor: '#d7c5a8',
+    borderRadius: 16,
+    padding: 14,
+    backgroundColor: '#ffffff',
+    marginRight: 12,
+  },
+  recentCommentWorkTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#2c1f0c',
+  },
+  recentCommentWorkAuthor: {
+    fontSize: 12,
+    color: '#6f5a35',
+    marginTop: 2,
+  },
+  recentCommentTarget: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8b7a65',
+    marginTop: 8,
+  },
+  recentCommentBody: {
+    fontSize: 13,
+    color: '#3b2a15',
+    lineHeight: 18,
+    marginTop: 6,
+  },
   sectionList: {
     flex: 1,
   },

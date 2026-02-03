@@ -27,6 +27,7 @@ import {
 } from '../writings/passageUtils';
 import { getShareableBlockText } from '../sharing/shareUtils';
 import { useBlockRenderer } from '../writings/useBlockRenderer';
+import { listRecentComments } from '../writings/annotationsService';
 import { getWork, listWorks } from '../writings/worksService';
 import { appStyles } from '../styles/components';
 
@@ -48,6 +49,10 @@ function AppContent() {
   const [toastVisible, setToastVisible] = useState(false);
   const [remoteWorks, setRemoteWorks] = useState([]);
   const [worksLoadError, setWorksLoadError] = useState(null);
+
+  const [recentComments, setRecentComments] = useState([]);
+  const [recentCommentsLoading, setRecentCommentsLoading] = useState(false);
+  const [recentCommentsError, setRecentCommentsError] = useState(null);
 
   const {
     user: authenticatedUser,
@@ -152,6 +157,50 @@ function AppContent() {
     };
 
     loadWorks();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [authenticatedUser?.token, isInAppFlow]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadRecent = async () => {
+      if (!isInAppFlow) {
+        return;
+      }
+
+      const token = authenticatedUser?.token ?? null;
+      if (!token) {
+        if (isMounted) {
+          setRecentComments([]);
+          setRecentCommentsLoading(false);
+          setRecentCommentsError(null);
+        }
+        return;
+      }
+
+      try {
+        setRecentCommentsLoading(true);
+        setRecentCommentsError(null);
+        const comments = await listRecentComments({ limit: 20 }, { token });
+        if (isMounted) {
+          setRecentComments(comments);
+        }
+      } catch (error) {
+        console.warn('[Comments] Unable to load recent comments', error);
+        if (isMounted) {
+          setRecentCommentsError(error?.message ?? 'Unable to load recent comments');
+        }
+      } finally {
+        if (isMounted) {
+          setRecentCommentsLoading(false);
+        }
+      }
+    };
+
+    loadRecent();
 
     return () => {
       isMounted = false;
@@ -1228,6 +1277,9 @@ function AppContent() {
       sectionViewabilityConfig,
       sectionViewableItemsChanged,
       renderBlockContent,
+      recentComments,
+      recentCommentsLoading,
+      recentCommentsError,
     },
     program: {
       passages: programPassages,
@@ -1327,6 +1379,13 @@ function AppContent() {
       openSearchResult: handleOpenSearchResult,
       removeVerse: handleRemoveFromMyVerses,
       openVerse: handleOpenVerse,
+      openRecentComment: comment => {
+        // MVP: just open the work (writing) view. (Deep-linking into section + opening modal can come next.)
+        const workId = comment?.workId;
+        if (workId) {
+          handleSelectWriting(workId);
+        }
+      },
     },
   };
 
