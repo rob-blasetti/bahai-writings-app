@@ -180,43 +180,46 @@ function extractNotesFromDom($) {
     return null;
   }
 
-  let found = false;
-  const parts = [];
-  body.find('*').each((_, el) => {
-    if (el === notesHeading.get(0)) {
-      found = true;
-      return;
-    }
-    if (!found) {
-      return;
-    }
-    const tag = el.name?.toLowerCase?.() ?? '';
-    if (!tag) {
-      return;
-    }
-    if (['p', 'li', 'div'].includes(tag)) {
-      const text = normalizeWhitespace($(el).text());
-      if (text) {
-        parts.push(text);
-      }
-    }
-  });
-
-  const content = normalizeWhitespace(parts.join('\n\n'));
-  if (!content) {
+  const notesContainer = notesHeading.parent().nextAll('div.df').first();
+  if (!notesContainer || notesContainer.length === 0) {
     return {};
   }
 
   const notes = {};
-  const pattern = /\[(\d+)\]([^\[]+)/g;
-  let match;
-  while ((match = pattern.exec(content)) !== null) {
-    const key = match[1];
-    const value = normalizeWhitespace(match[2]);
-    if (key && value) {
-      notes[key] = value;
+
+  // After prepareDocument(), note markers become literal text like "[1]".
+  // In the Bahá’í Reference Library DOM, each note is typically contained in `li > div`.
+  notesContainer.find('li > div').each((_, el) => {
+    const raw = normalizeWhitespace($(el).text());
+    const match = raw.match(/^\[(\d+)\]\s*(.*)$/s);
+    if (!match) {
+      return;
     }
-  }
+
+    const key = match[1];
+    const rawValue = normalizeWhitespace(match[2]);
+    if (!key || !rawValue) {
+      return;
+    }
+
+    // Dedupe repeated paragraphs inside a single note.
+    const paras = rawValue
+      .split(/\n\n+/)
+      .map(p => normalizeWhitespace(p))
+      .filter(Boolean);
+
+    const seen = new Set();
+    const uniq = [];
+    for (const para of paras) {
+      if (seen.has(para)) {
+        continue;
+      }
+      seen.add(para);
+      uniq.push(para);
+    }
+
+    notes[key] = uniq.join('\n\n');
+  });
 
   return notes;
 }
@@ -283,7 +286,7 @@ function buildToc(units) {
   for (let i = 0; i < headings.length; i += 1) {
     const current = headings[i];
     const next = headings[i + 1];
-    const startIndex = Math.min(current.index + 1, units.length - 1);
+    const startIndex = current.index;
     const endIndex = next ? Math.max(next.index - 1, startIndex) : units.length - 1;
 
     const start = units[startIndex]?.id ?? units[current.index]?.id;
