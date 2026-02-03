@@ -515,20 +515,15 @@ function AppContent() {
     };
   }, [selectedSectionId, sectionPageWidth]);
 
-  const handleSelectWriting = useCallback(
-    async writingId => {
-      const workId = String(writingId ?? '').trim();
-      if (!workId) {
-        return;
+  const loadWorkById = useCallback(
+    async workId => {
+      const normalizedId = String(workId ?? '').trim();
+      if (!normalizedId) {
+        return null;
       }
-
-      setSelectedWritingId(workId);
-      setSelectedSectionId(null);
-      setRandomPassage(null);
-
       try {
         const token = authenticatedUser?.token ?? null;
-        const work = await getWork(workId, { token });
+        const work = await getWork(normalizedId, { token });
         setSelectedWork(
           work
             ? {
@@ -542,14 +537,32 @@ function AppContent() {
               }
             : null,
         );
+        return work ?? null;
       } catch (error) {
-        console.warn('[Works] Unable to load work', { workId, error });
+        console.warn('[Works] Unable to load work', { workId: normalizedId, error });
         setSelectedWork(null);
+        return null;
       }
+    },
+    [authenticatedUser?.token],
+  );
+
+  const handleSelectWriting = useCallback(
+    async writingId => {
+      const workId = String(writingId ?? '').trim();
+      if (!workId) {
+        return;
+      }
+
+      setSelectedWritingId(workId);
+      setSelectedSectionId(null);
+      setRandomPassage(null);
+
+      await loadWorkById(workId);
 
       navigateToScreen('writing');
     },
-    [authenticatedUser?.token, navigateToScreen],
+    [loadWorkById, navigateToScreen],
   );
 
   const handleSelectSection = sectionId => {
@@ -609,59 +622,26 @@ function AppContent() {
   );
 
   const handleOpenSearchResult = useCallback(
-    ({
-      writingId,
-      sectionId,
-      blockId,
-      blockIndex = 0,
-      query,
-      matchIndex,
-      blockTextLength,
-    }) => {
+    async ({ writingId, sectionId }) => {
       if (!writingId || !sectionId) {
         return;
       }
 
-      const normalizedBlockIndex =
-        typeof blockIndex === 'number' && blockIndex >= 0
-          ? blockIndex
-          : 0;
-      pendingSectionBlockIndexRef.current = normalizedBlockIndex;
-
-      const isAlreadyViewingSection =
-        currentScreen === 'section' &&
-        selectedWritingId === writingId &&
-        selectedSectionId === sectionId;
-
-      if (isAlreadyViewingSection && sectionPagerRef.current) {
-        pendingSectionBlockIndexRef.current = null;
-        sectionPagerRef.current.scrollToOffset({
-          offset: sectionPageWidth * normalizedBlockIndex,
-          animated: true,
-        });
-      } else {
-        setSelectedWritingId(writingId);
-        setSelectedSectionId(sectionId);
+      const normalizedWritingId = String(writingId).trim();
+      const normalizedSectionId = String(sectionId).trim();
+      if (!normalizedWritingId || !normalizedSectionId) {
+        return;
       }
 
-      navigateToScreen('section');
-      activateSearchHighlight({
-        writingId,
-        sectionId,
-        blockId,
-        query,
-        matchIndex,
-        blockTextLength,
-      });
+      if (selectedWritingId !== normalizedWritingId) {
+        setSelectedWritingId(normalizedWritingId);
+        await loadWorkById(normalizedWritingId);
+      }
+
+      setSelectedSectionId(normalizedSectionId);
+      navigateToScreen('workSection');
     },
-    [
-      activateSearchHighlight,
-      currentScreen,
-      sectionPageWidth,
-      selectedSectionId,
-      selectedWritingId,
-      navigateToScreen,
-    ],
+    [loadWorkById, navigateToScreen, selectedWritingId],
   );
 
   const handleOpenVerse = useCallback(
@@ -669,29 +649,12 @@ function AppContent() {
       if (!verse || !verse.writingId || !verse.sectionId) {
         return;
       }
-      const blockId = verse.block?.id ?? null;
-      const matchedPassage = blockId
-        ? availablePassages.find(
-            passage =>
-              passage.writingId === verse.writingId &&
-              passage.sectionId === verse.sectionId &&
-              passage.block?.id === blockId,
-          )
-        : null;
-      const blockIndex = matchedPassage?.blockIndex ?? 0;
-
       handleOpenSearchResult({
         writingId: verse.writingId,
         sectionId: verse.sectionId,
-        blockId,
-        blockIndex,
-        query: null,
-        matchIndex: 0,
-        blockTextLength:
-          typeof verse.block?.text === 'string' ? verse.block.text.length : 0,
       });
     },
-    [availablePassages, handleOpenSearchResult],
+    [handleOpenSearchResult],
   );
 
   const handleShowRandomPassage = () => {
@@ -717,14 +680,6 @@ function AppContent() {
     handleOpenSearchResult({
       writingId: randomPassage.writingId,
       sectionId: randomPassage.sectionId,
-      blockId: randomPassage.block?.id ?? null,
-      blockIndex: randomPassage.blockIndex ?? 0,
-      query: null,
-      matchIndex: 0,
-      blockTextLength:
-        typeof randomPassage.block?.text === 'string'
-          ? randomPassage.block.text.length
-          : 0,
     });
   }, [handleOpenSearchResult, randomPassage]);
 
