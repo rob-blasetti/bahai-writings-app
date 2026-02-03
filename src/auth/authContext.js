@@ -167,7 +167,17 @@ export function AuthProvider({ children }) {
     } finally {
       setIsAuthenticating(false);
     }
-  }, [authEmail, authPassword, normalizeUserFromPayload]);
+  }, [
+    authEmail,
+    authPassword,
+    normalizeUserFromPayload,
+    setAuthEmail,
+    setAuthError,
+    setAuthMode,
+    setAuthPassword,
+    setIsAuthenticating,
+    setUser,
+  ]);
 
   const continueAsGuest = useCallback(async () => {
     setUser(null);
