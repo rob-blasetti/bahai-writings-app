@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile, mkdir } from 'fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { load } from 'cheerio';
@@ -114,12 +114,20 @@ function collectInlineText($, node) {
     return '';
   }
 
-  // For lists, preserve bullets as newlines.
-  if ($node.is('li')) {
-    return normalizeWhitespace($node.text());
-  }
-
   return normalizeWhitespace($node.text());
+}
+
+function collectAnchorIds($, $el) {
+  const ids = new Set();
+  const ownId = $el.attr('id');
+  if (ownId) ids.add(ownId);
+
+  $el.find('a[id]').each((_, a) => {
+    const id = $(a).attr('id');
+    if (id) ids.add(id);
+  });
+
+  return ids.size > 0 ? Array.from(ids).sort((a, b) => a.localeCompare(b)) : null;
 }
 
 function collectBlocks($, root) {
@@ -141,8 +149,17 @@ function collectBlocks($, root) {
     const name = node.name?.toLowerCase() ?? '';
     const $el = $(node);
 
-    const isBlock =
-      ['p', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote'].includes(name);
+    const isBlock = [
+      'p',
+      'h1',
+      'h2',
+      'h3',
+      'h4',
+      'h5',
+      'h6',
+      'li',
+      'blockquote',
+    ].includes(name);
 
     const hasNestedBlocks =
       $el.children('p,h1,h2,h3,h4,h5,h6,li,blockquote,div,table').length > 0 &&
@@ -155,7 +172,10 @@ function collectBlocks($, root) {
       }
 
       const type = name.startsWith('h') ? 'heading' : 'paragraph';
-      blocks.push({ type, text });
+      const sourceId = $el.attr('id') || null;
+      const anchorIds = collectAnchorIds($, $el);
+
+      blocks.push({ type, text, sourceId, anchorIds });
       return;
     }
 
@@ -167,6 +187,20 @@ function collectBlocks($, root) {
     .each((_, child) => walk(child));
 
   return blocks;
+}
+
+function buildNotesMapFromBlocks(blocks) {
+  const notesHeadingIndex = blocks.findIndex(
+    block =>
+      (block?.type === 'heading' || block?.type === 'paragraph') &&
+      /^notes?$/i.test(String(block.text ?? '').trim()),
+  );
+
+  if (notesHeadingIndex < 0) {
+    return { notes: null, notesStartIndex: -1 };
+  }
+
+  return { notes: null, notesStartIndex: notesHeadingIndex };
 }
 
 function extractNotesFromDom($) {
@@ -224,41 +258,9 @@ function extractNotesFromDom($) {
   return notes;
 }
 
-function buildNotesMapFromBlocks(blocks) {
-  const notesHeadingIndex = blocks.findIndex(
-    block =>
-      (block?.type === 'heading' || block?.type === 'paragraph') &&
-      /^notes?$/i.test(String(block.text ?? '').trim()),
-  );
-
-  if (notesHeadingIndex < 0) {
-    return { notes: null, notesStartIndex: -1 };
-  }
-
-  const notesBlocks = blocks.slice(notesHeadingIndex + 1);
-  const content = notesBlocks.map(block => block.text).join('\n\n');
-
-  const notes = {};
-  const pattern = /\[(\d+)\]([^\[]+)/g;
-  let match;
-  while ((match = pattern.exec(content)) !== null) {
-    const key = match[1];
-    const value = normalizeWhitespace(match[2]);
-    if (key && value) {
-      notes[key] = value;
-    }
-  }
-
-  return {
-    notes: Object.keys(notes).length > 0 ? notes : null,
-    notesStartIndex: notesHeadingIndex,
-  };
-}
-
 function makeUnitId(index) {
   return `p:${String(index).padStart(6, '0')}`;
 }
-
 
 function convertNumericHeadings(blocks) {
   return blocks.map(block => {
@@ -321,21 +323,7 @@ function dedupeAdjacentHeadings(units) {
   return out;
 }
 
-async function main() {
-  const args = process.argv.slice(2);
-  const fileFlagIndex = args.indexOf('--file');
-  const outFlagIndex = args.indexOf('--out');
-  const versionFlagIndex = args.indexOf('--version');
-
-  const fileName = fileFlagIndex >= 0 ? args[fileFlagIndex + 1] : null;
-  const outFile = outFlagIndex >= 0 ? args[outFlagIndex + 1] : null;
-  const version = versionFlagIndex >= 0 ? Number(args[versionFlagIndex + 1]) : 1;
-
-  if (!fileName) {
-    console.error('Usage: node scripts/export-writing-json.mjs --file <xhtml> [--out <path>] [--version <n>]');
-    process.exit(1);
-  }
-
+async function exportOne({ fileName, outPath, version }) {
   const fullPath = path.join(writingsDirectory, fileName);
   const markup = await readFile(fullPath, 'utf8');
   const $ = load(markup, { decodeEntities: true });
@@ -346,8 +334,7 @@ async function main() {
   const domNotes = extractNotesFromDom($);
 
   const rawBlocks = collectBlocks($, $('body'));
-  const { notes: blockNotes, notesStartIndex } = buildNotesMapFromBlocks(rawBlocks);
-  const notes = (blockNotes && Object.keys(blockNotes).length > 0) ? blockNotes : (domNotes || null);
+  const { notesStartIndex } = buildNotesMapFromBlocks(rawBlocks);
   const contentBlocks = notesStartIndex > 0 ? rawBlocks.slice(0, notesStartIndex) : rawBlocks;
 
   const normalizedBlocks = convertNumericHeadings(contentBlocks);
@@ -362,7 +349,7 @@ async function main() {
 
   const work = {
     workId: meta.id,
-    version: Number.isFinite(version) ? version : 1,
+    version,
     generatedAt: new Date().toISOString(),
     meta: {
       title: meta.title,
@@ -372,16 +359,103 @@ async function main() {
     },
     toc: buildToc(units),
     units,
-    notes: notes || {},
+    notes: domNotes || {},
   };
+
+  await mkdir(path.dirname(outPath), { recursive: true });
+  await writeFile(outPath, JSON.stringify(work, null, 2));
+}
+
+async function listXhtmlFiles(dir) {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await listXhtmlFiles(fullPath);
+      files.push(...nested);
+      continue;
+    }
+    if (entry.isFile() && entry.name.toLowerCase().endsWith('.xhtml')) {
+      files.push(path.relative(dir, fullPath));
+    }
+  }
+
+  return files.sort((a, b) => a.localeCompare(b));
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+
+  const allFlag = args.includes('--all');
+  const fileFlagIndex = args.indexOf('--file');
+  const outFlagIndex = args.indexOf('--out');
+  const outDirFlagIndex = args.indexOf('--out-dir');
+  const versionFlagIndex = args.indexOf('--version');
+
+  const fileName = fileFlagIndex >= 0 ? args[fileFlagIndex + 1] : null;
+  const outFile = outFlagIndex >= 0 ? args[outFlagIndex + 1] : null;
+  const outDir = outDirFlagIndex >= 0 ? args[outDirFlagIndex + 1] : null;
+  const version = versionFlagIndex >= 0 ? Number(args[versionFlagIndex + 1]) : 1;
+
+  if (!allFlag && !fileName) {
+    console.error(
+      'Usage: node scripts/export-writing-json.mjs --file <xhtml> [--out <path>] [--version <n>]\n' +
+        '       node scripts/export-writing-json.mjs --all --out-dir <dir> [--version <n>]',
+    );
+    process.exit(1);
+  }
+
+  const resolvedVersion = Number.isFinite(version) ? version : 1;
+
+  if (allFlag) {
+    const resolvedOutDir = outDir
+      ? path.resolve(process.cwd(), outDir)
+      : path.resolve(process.cwd(), 'assets/exports');
+
+    await mkdir(resolvedOutDir, { recursive: true });
+
+    const relativeFiles = await listXhtmlFiles(writingsDirectory);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const relFile of relativeFiles) {
+      try {
+        const outPath = path.join(
+          resolvedOutDir,
+          `${path.basename(relFile, path.extname(relFile))}.json`,
+        );
+        await exportOne({ fileName: relFile, outPath, version: resolvedVersion });
+        successCount += 1;
+        console.log(
+          `Exported ${relFile} → ${path.relative(process.cwd(), outPath)}`,
+        );
+      } catch (error) {
+        failCount += 1;
+        console.error(`Failed ${relFile}: ${error?.message ?? error}`);
+      }
+    }
+
+    console.log(
+      `Done. Success: ${successCount}. Failed: ${failCount}. Output dir: ${path.relative(
+        process.cwd(),
+        resolvedOutDir,
+      )}`,
+    );
+
+    process.exit(failCount > 0 ? 1 : 0);
+  }
 
   const resolvedOut = outFile
     ? path.resolve(process.cwd(), outFile)
-    : path.resolve(process.cwd(), 'assets/examples', `${meta.id}.work.json`);
+    : path.resolve(
+        process.cwd(),
+        'assets/examples',
+        `${path.basename(fileName, path.extname(fileName))}.json`,
+      );
 
-  await mkdir(path.dirname(resolvedOut), { recursive: true });
-  await writeFile(resolvedOut, JSON.stringify(work, null, 2));
-
+  await exportOne({ fileName, outPath: resolvedOut, version: resolvedVersion });
   console.log(`Wrote ${path.relative(process.cwd(), resolvedOut)}`);
 }
 
