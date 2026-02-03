@@ -19,6 +19,15 @@ Complete the official React Native [environment setup](https://reactnative.dev/d
 
 ## Getting Started
 
+### Environment
+
+This project uses `react-native-config` for environment variables.
+
+- Copy `.env.example` to `.env`
+- Set `DEV_API` (used as the app's API base URL in development)
+
+> `.env` is git-ignored by design.
+
 ```sh
 npm install
 npm start           # starts Metro in watch mode
