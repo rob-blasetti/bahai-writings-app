@@ -6,18 +6,30 @@ Dotenv.load(File.expand_path('.env.beta', __dir__))
 platform :ios do
   desc "Push a new beta build to TestFlight"
   lane :beta do
+    api_url = ENV['API_URL'].to_s
+    UI.user_error!("Missing env var: API_URL") if api_url.empty?
+
     # Print environment variables to verify they load correctly
-    UI.message "🚀 Using API_URL: #{ENV['API_URL']}"
+    UI.message "🚀 Using API_URL: #{api_url}"
     UI.message "🔑 ASC_KEY_FILE: #{ENV['ASC_KEY_FILE']}"
+
+    api_key = app_store_connect_api_key(
+      key_id: ENV['ASC_KEY_ID'],
+      issuer_id: ENV['ASC_ISSUER_ID'],
+      key_filepath: ENV['ASC_KEY_FILE']
+    )
 
     sh "mkdir -p ios"
     sh "touch ios/Config.xcconfig"
-    
-    # 1. Pull down/update provisioning profiles & certificates from your signing repo
+
+    # 1. Pull down provisioning profiles & certificates from your signing repo.
+    # In CI we run readonly so we don't need Apple ID / interactive login.
     match(
       type: "appstore",
       git_url: "git@github.com:rob-blasetti/signing-repo.git",
-      app_identifier: "com.liquidspirit.kali"
+      app_identifier: "com.liquidspirit.kali",
+      api_key: api_key,
+      readonly: ENV['CI'].to_s == 'true'
     )
 
     # 2. Increment build number
@@ -45,11 +57,7 @@ platform :ios do
 
     # 5. Upload to TestFlight
     upload_to_testflight(
-      api_key: app_store_connect_api_key(
-      key_id: ENV['ASC_KEY_ID'],
-      issuer_id: ENV['ASC_ISSUER_ID'],
-      key_filepath: ENV['ASC_KEY_FILE']
+      api_key: api_key
     )
-  )
   end
 end
