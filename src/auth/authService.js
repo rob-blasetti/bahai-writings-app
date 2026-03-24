@@ -1,3 +1,4 @@
+import Config from 'react-native-config';
 import { API_URL } from '../../config';
 import { normalizeBaseUrl } from '../utils/urlUtils';
 
@@ -7,6 +8,12 @@ const DEFAULT_AUTH_ENDPOINT =
 const resolveAuthEndpoint = () => {
   if (global?.LIQUID_SPIRIT_AUTH_ENDPOINT) {
     return global.LIQUID_SPIRIT_AUTH_ENDPOINT;
+  }
+
+  const configuredAuthBase = Config.AUTH_API_URL || Config.PROD_AUTH_API || null;
+  const normalizedAuthBase = normalizeBaseUrl(configuredAuthBase);
+  if (normalizedAuthBase) {
+    return `${normalizedAuthBase}/api/auth/kali/login-ls`;
   }
 
   const normalizedBase = normalizeBaseUrl(API_URL);
