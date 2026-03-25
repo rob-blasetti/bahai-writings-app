@@ -28,9 +28,9 @@ export default function SignInScreen({
       topNav={{ backAccessibilityLabel: 'Back', onBack: onCancel }}
     >
       <View style={styles.authFormContainer}>
-        <Text style={styles.authFormTitle}>Sign in to Liquid Spirit</Text>
+        <Text style={styles.authFormTitle}>Log in or register</Text>
         <Text style={styles.authFormSubtitle}>
-          Enter your email and password to continue.
+          Use your Liquid Spirit account details to continue.
         </Text>
         {authError ? (
           <Text style={styles.authErrorText}>{authError}</Text>
@@ -84,7 +84,9 @@ export default function SignInScreen({
           {isAuthenticating ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.authPrimaryButtonLabel}>Sign In</Text>
+            <Text style={styles.authPrimaryButtonLabel}>
+              Log In With Liquid Spirit
+            </Text>
           )}
         </TouchableOpacity>
       </View>

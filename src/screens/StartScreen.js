@@ -19,7 +19,7 @@ export default function StartScreen({
         <Text style={styles.authGreeting}>Welcome</Text>
         <Text style={styles.authName}>{displayName}</Text>
         <Text style={styles.authSubtitle}>
-          Sign in with your Liquid Spirit account or continue exploring as a guest.
+          Log in or register with Liquid Spirit, or keep exploring as a guest.
         </Text>
       </View>
       <View style={styles.authActions}>
@@ -28,7 +28,7 @@ export default function StartScreen({
           style={styles.authPrimaryButton}
         >
           <Text style={styles.authPrimaryButtonLabel}>
-            Sign In With Liquid Spirit
+            Log In With Liquid Spirit
           </Text>
         </TouchableOpacity>
         <TouchableOpacity

@@ -25,6 +25,7 @@ This project uses `react-native-config` for environment variables.
 
 - Copy `.env.example` to `.env`
 - Set `DEV_API` (used as the app's API base URL in development)
+- Set `AUTH_API_URL` to the auth gateway, for example `https://liquid-spirit-auth.vercel.app`
 
 > `.env` is git-ignored by design.
 
