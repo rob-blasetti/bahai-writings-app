@@ -1,6 +1,8 @@
 import React from 'react';
-import { Text, TouchableOpacity, View } from 'react-native';
+import { Image, Text, TouchableOpacity, View } from 'react-native';
 import BaseScreen from '../components/BaseScreen';
+
+const liquidSpiritLogo = require('../../assets/images/liquid-spirit-logo.png');
 
 export default function StartScreen({
   styles,
@@ -24,25 +26,47 @@ export default function StartScreen({
         </Text>
       </View>
       <View style={styles.authActions}>
+        <View style={styles.authPrimaryActionRow}>
+          <TouchableOpacity
+            onPress={onStartRegister}
+            style={[styles.authSecondaryButton, styles.authPrimaryActionButton]}
+          >
+            <Text style={styles.authSecondaryButtonLabel}>Register</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onStartSignIn}
+            style={[
+              styles.authSecondaryButton,
+              styles.authPrimaryActionButton,
+              styles.authPrimaryActionButtonSpacing,
+            ]}
+          >
+            <Text style={styles.authSecondaryButtonLabel}>Log In</Text>
+          </TouchableOpacity>
+        </View>
         <TouchableOpacity
           onPress={onStartSignIn}
           style={styles.authPrimaryButton}
         >
-          <Text style={styles.authPrimaryButtonLabel}>
-            Log In With Liquid Spirit
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onStartRegister}
-          style={styles.authSecondaryButton}
-        >
-          <Text style={styles.authSecondaryButtonLabel}>Register</Text>
+          <View style={styles.authPrimaryButtonContent}>
+            <View style={styles.authPrimaryButtonLogoWrap}>
+              <Image
+                source={liquidSpiritLogo}
+                style={styles.authPrimaryButtonLogo}
+                resizeMode="contain"
+                accessibilityIgnoresInvertColors
+              />
+            </View>
+            <Text style={styles.authPrimaryButtonLabel}>
+              Log In With Liquid Spirit
+            </Text>
+          </View>
         </TouchableOpacity>
         <TouchableOpacity
           onPress={onContinueAsGuest}
-          style={styles.authLinkButton}
+          style={styles.authGuestButton}
         >
-          <Text style={styles.authLinkLabel}>Continue as Guest</Text>
+          <Text style={styles.authGuestButtonLabel}>Continue as Guest</Text>
         </TouchableOpacity>
       </View>
     </BaseScreen>
