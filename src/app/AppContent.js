@@ -1405,6 +1405,9 @@ function AppContent() {
       fontScale,
     },
     profile: {
+      user: authenticatedUser?.user ?? null,
+      kaliUser: authenticatedUser?.kaliUser ?? null,
+      rawPayload: authenticatedUser?.rawPayload ?? null,
       email: authenticatedUser?.email ?? authEmail ?? '',
       memberRef:
         typeof authenticatedUser?.memberRef === 'string'

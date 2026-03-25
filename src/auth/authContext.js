@@ -30,6 +30,51 @@ import {
 
 const AuthContext = createContext(null);
 
+function normalizeObjectRecord(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null;
+  }
+
+  return value;
+}
+
+function pickFirstObject(...candidates) {
+  for (const candidate of candidates) {
+    const normalized = normalizeObjectRecord(candidate);
+    if (normalized) {
+      return normalized;
+    }
+  }
+
+  return null;
+}
+
+function resolveAuthUserDetails(payload) {
+  return pickFirstObject(
+    payload?.user,
+    payload?.data?.user,
+    payload?.auth?.user,
+    payload?.profile,
+    payload?.data?.profile,
+    payload?.auth?.profile,
+  );
+}
+
+function resolveKaliUserDetails(payload) {
+  return pickFirstObject(
+    payload?.kaliUser,
+    payload?.kali_user,
+    payload?.data?.kaliUser,
+    payload?.data?.kali_user,
+    payload?.auth?.kaliUser,
+    payload?.auth?.kali_user,
+    payload?.user?.kaliUser,
+    payload?.user?.kali_user,
+    payload?.data?.user?.kaliUser,
+    payload?.data?.user?.kali_user,
+  );
+}
+
 function usePersistedUserState() {
   const [user, setUser] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
@@ -59,6 +104,9 @@ function usePersistedUserState() {
           tokenExpiresAt: persisted.tokenExpiresAt ?? null,
           memberRef: persisted.memberRef ?? null,
           userId: persisted.userId ?? persisted.memberRef ?? null,
+          user: normalizeObjectRecord(persisted.user),
+          kaliUser: normalizeObjectRecord(persisted.kaliUser),
+          rawPayload: normalizeObjectRecord(persisted.rawPayload),
         };
         setUser(normalizedUser);
         setAuthEmail(persisted.email ?? '');
@@ -140,6 +188,8 @@ export function AuthProvider({ children }) {
       const token = resolveAuthToken(payload);
       const tokenExpiresAt = inferAuthExpirationMs(payload, token);
       const memberRef = resolveUserId(payload, token);
+      const resolvedUser = resolveAuthUserDetails(payload);
+      const resolvedKaliUser = resolveKaliUserDetails(payload);
 
       return {
         name: inferredName,
@@ -148,6 +198,9 @@ export function AuthProvider({ children }) {
         tokenExpiresAt: tokenExpiresAt ?? null,
         memberRef: memberRef ?? null,
         userId: memberRef ?? null,
+        user: resolvedUser,
+        kaliUser: resolvedKaliUser,
+        rawPayload: normalizeObjectRecord(payload),
       };
     },
     [user?.name],
@@ -181,7 +234,7 @@ export function AuthProvider({ children }) {
         savedAt: Date.now(),
       });
       setAuthPassword('');
-      return { success: true, user: normalizedUser };
+      return { success: true, user: normalizedUser, payload: result };
     } catch (error) {
       const message = error?.message ?? 'Unable to sign in. Please try again.';
       setAuthError(message);

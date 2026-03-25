@@ -90,7 +90,14 @@ export default function TabStackNavigator({
     selectionLimit: shareSelectionLimit = 2,
   } = share;
 
-  const { email: profileEmail, memberRef, isAuthenticated } = profile;
+  const {
+    user: profileUser,
+    kaliUser: profileKaliUser,
+    rawPayload: profileRawPayload,
+    email: profileEmail,
+    memberRef,
+    isAuthenticated,
+  } = profile;
   const { items: myVerses } = verses;
 
   const {
@@ -155,6 +162,9 @@ export default function TabStackNavigator({
         <ProfileScreen
           styles={styles}
           displayName={displayName}
+          user={profileUser}
+          kaliUser={profileKaliUser}
+          rawPayload={profileRawPayload}
           email={profileEmail}
           memberRef={memberRef}
           isAuthenticated={isAuthenticated}
