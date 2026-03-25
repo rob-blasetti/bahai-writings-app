@@ -1,19 +1,30 @@
-import Config from 'react-native-config';
-import { API_URL } from '../../config';
+import { API_URL, AUTH_API_URL } from '../../config';
 import { normalizeBaseUrl } from '../utils/urlUtils';
 
 const DEFAULT_AUTH_ENDPOINT =
-  'https://liquidspirit.example.com/api/kali/login-ls';
+  'https://liquid-spirit-auth.vercel.app/api/auth/kali/login-ls';
+
+const normalizeAuthEndpoint = value => {
+  const normalizedValue = normalizeBaseUrl(value);
+  if (!normalizedValue) {
+    return null;
+  }
+
+  if (/\/api\/auth\/kali\/login-ls\/?$/i.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  return `${normalizedValue}/api/auth/kali/login-ls`;
+};
 
 const resolveAuthEndpoint = () => {
   if (global?.LIQUID_SPIRIT_AUTH_ENDPOINT) {
-    return global.LIQUID_SPIRIT_AUTH_ENDPOINT;
+    return normalizeAuthEndpoint(global.LIQUID_SPIRIT_AUTH_ENDPOINT);
   }
 
-  const configuredAuthBase = Config.AUTH_API_URL || Config.PROD_AUTH_API || null;
-  const normalizedAuthBase = normalizeBaseUrl(configuredAuthBase);
-  if (normalizedAuthBase) {
-    return `${normalizedAuthBase}/api/auth/kali/login-ls`;
+  const configuredAuthEndpoint = normalizeAuthEndpoint(AUTH_API_URL);
+  if (configuredAuthEndpoint) {
+    return configuredAuthEndpoint;
   }
 
   const normalizedBase = normalizeBaseUrl(API_URL);
