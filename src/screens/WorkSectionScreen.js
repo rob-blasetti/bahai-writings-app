@@ -11,7 +11,6 @@ function parseUnitNumber(unitId) {
 
 export default function WorkSectionScreen({
   styles,
-  scaledTypography,
   work,
   section,
   token,
@@ -103,21 +102,6 @@ export default function WorkSectionScreen({
     loadNextPage();
   }, [loadNextPage]);
 
-  const header = useMemo(() => {
-    if (!work || !section) return null;
-    return (
-      <View style={styles.passageMeta}>
-        <Text style={styles.passageMetaLabel}>Reading</Text>
-        <Text style={[styles.passageMetaWriting, scaledTypography.passageMetaWriting]}>
-          {work.title}
-        </Text>
-        <Text style={[styles.passageMetaSection, scaledTypography.passageMetaSection]}>
-          {section.title}
-        </Text>
-      </View>
-    );
-  }, [scaledTypography, section, styles, work]);
-
   const renderItem = useCallback(
     ({ item, index }) => (
       <View style={styles.blockWrapper}>
@@ -154,7 +138,12 @@ export default function WorkSectionScreen({
 
   if (!work || !section) {
     return (
-      <BaseScreen styles={styles} variant="plain" topNav={{ title: 'Reading', backAccessibilityLabel: 'Back', onBack }}>
+      <BaseScreen
+        styles={styles}
+        variant="plain"
+        style={styles.homeContainer}
+        topNav={{ title: 'Reading', backAccessibilityLabel: 'Back', onBack }}
+      >
         <View style={styles.emptyState}>
           <Text style={styles.emptyStateText}>No work selected.</Text>
         </View>
@@ -166,7 +155,29 @@ export default function WorkSectionScreen({
     <BaseScreen
       styles={styles}
       variant="plain"
-      topNav={{ title: section.title, backAccessibilityLabel: 'Back', onBack }}
+      style={styles.homeContainer}
+      topNav={{
+        title: (
+          <View style={styles.topBarTitleStack}>
+            <Text
+              style={styles.topBarTitlePrimary}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {section.title}
+            </Text>
+            <Text
+              style={styles.topBarTitleSecondary}
+              numberOfLines={1}
+              ellipsizeMode="tail"
+            >
+              {work.title}
+            </Text>
+          </View>
+        ),
+        backAccessibilityLabel: 'Back',
+        onBack,
+      }}
     >
       {error ? (
         <View style={styles.emptyState}>
@@ -178,7 +189,6 @@ export default function WorkSectionScreen({
         data={units}
         keyExtractor={item => item.id}
         renderItem={renderItem}
-        ListHeaderComponent={header}
         ListFooterComponent={footer}
         onEndReached={() => {
           if (!isLoading && hasMore) {
@@ -186,7 +196,10 @@ export default function WorkSectionScreen({
           }
         }}
         onEndReachedThreshold={0.5}
-        contentContainerStyle={styles.sectionListContent}
+        contentContainerStyle={[
+          styles.sectionListContent,
+          styles.workSectionListContent,
+        ]}
       />
     </BaseScreen>
   );
