@@ -58,14 +58,25 @@ function AppContent() {
     user: authenticatedUser,
     authEmail,
     setAuthEmail,
+    authBahaiId,
+    setAuthBahaiId,
     authPassword,
     setAuthPassword,
+    authVerificationCode,
+    setAuthVerificationCode,
+    authResetToken,
+    setAuthResetToken,
     authError,
     setAuthError,
     isAuthenticating,
     hasHydratedAuth,
     authMode,
     signIn,
+    register,
+    verifyRegistration,
+    requestPasswordReset,
+    validateResetToken,
+    resetPassword,
     continueAsGuest,
     logout,
   } = useAuth();
@@ -815,6 +826,26 @@ function AppContent() {
     navigateToScreen('signin');
   };
 
+  const handleStartRegister = () => {
+    setAuthError(null);
+    navigateToScreen('register');
+  };
+
+  const handleOpenVerifyRegistration = () => {
+    setAuthError(null);
+    navigateToScreen('verify');
+  };
+
+  const handleOpenForgotPassword = () => {
+    setAuthError(null);
+    navigateToScreen('forgotPassword');
+  };
+
+  const handleOpenResetPassword = () => {
+    setAuthError(null);
+    navigateToScreen('resetPassword');
+  };
+
   const handleCancelSignIn = () => {
     setAuthError(null);
     setAuthPassword('');
@@ -838,6 +869,61 @@ function AppContent() {
         'Signed in',
         display ? `Welcome, ${display}!` : 'You are signed in.',
       );
+    }
+  };
+
+  const handleRegister = async () => {
+    const result = await register();
+    if (result.success) {
+      Alert.alert(
+        'Verification sent',
+        result.payload?.message ??
+          'Check your email for the verification code, then complete account verification.',
+      );
+      navigateToScreen('verify');
+    }
+  };
+
+  const handleVerifyRegistration = async () => {
+    const result = await verifyRegistration();
+    if (result.success) {
+      const display = result.user?.name ?? 'Friend';
+      Alert.alert(
+        'Account verified',
+        display ? `Welcome, ${display}!` : 'Your account is verified.',
+      );
+    }
+  };
+
+  const handleRequestPasswordReset = async () => {
+    const result = await requestPasswordReset();
+    if (result.success) {
+      Alert.alert(
+        'Reset email sent',
+        result.payload?.message ?? 'Check your email for the reset link.',
+      );
+      navigateToScreen('resetPassword');
+    }
+  };
+
+  const handleValidateResetToken = async () => {
+    const result = await validateResetToken();
+    if (result.success) {
+      Alert.alert(
+        'Token valid',
+        result.payload?.message ?? 'Your reset token is valid.',
+      );
+    }
+  };
+
+  const handleResetPassword = async () => {
+    const result = await resetPassword();
+    if (result.success) {
+      Alert.alert(
+        'Password reset',
+        result.payload?.message ?? 'Your password has been reset.',
+      );
+      navigateToScreen('signin');
     }
   };
 
@@ -1258,7 +1344,10 @@ function AppContent() {
     authenticatedUser,
     auth: {
       email: authEmail,
+      bahaiId: authBahaiId,
       password: authPassword,
+      verificationCode: authVerificationCode,
+      resetToken: authResetToken,
       error: authError,
       isAuthenticating,
     },
@@ -1330,10 +1419,22 @@ function AppContent() {
     },
     handlers: {
       startSignIn: handleStartSignIn,
+      startRegister: handleStartRegister,
+      openVerifyRegistration: handleOpenVerifyRegistration,
+      openForgotPassword: handleOpenForgotPassword,
+      openResetPassword: handleOpenResetPassword,
       continueAsGuest: handleContinueAsGuest,
+      changeBahaiId: setAuthBahaiId,
       changeEmail: setAuthEmail,
       changePassword: setAuthPassword,
+      changeVerificationCode: setAuthVerificationCode,
+      changeResetToken: setAuthResetToken,
       signIn: handleSignIn,
+      register: handleRegister,
+      verifyRegistration: handleVerifyRegistration,
+      requestPasswordReset: handleRequestPasswordReset,
+      validateResetToken: handleValidateResetToken,
+      resetPassword: handleResetPassword,
       cancelSignIn: handleCancelSignIn,
       readWritings: handleOpenCollections,
       openPrayers: handleOpenPrayers,

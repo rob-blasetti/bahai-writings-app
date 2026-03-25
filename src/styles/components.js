@@ -102,6 +102,17 @@ export const appStyles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.2,
   },
+  authLinkButton: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+  },
+  authLinkLabel: {
+    color: '#6f5a35',
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
   authFormContainer: {
     flex: 1,
     paddingHorizontal: 16,
@@ -673,6 +684,9 @@ export const appStyles = StyleSheet.create({
   },
   sectionListContent: {
     paddingBottom: 16,
+  },
+  workSectionListContent: {
+    paddingTop: 4,
   },
   sectionRow: {
     paddingVertical: 14,

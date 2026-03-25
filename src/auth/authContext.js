@@ -6,7 +6,14 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import { authenticateLiquidSpirit } from './authService';
+import {
+  authenticateLiquidSpirit,
+  registerLiquidSpirit,
+  requestLiquidSpiritPasswordReset,
+  resetLiquidSpiritPassword,
+  validateLiquidSpiritResetToken,
+  verifyLiquidSpiritRegistration,
+} from './authService';
 import {
   clearPersistedAuthState,
   loadPersistedAuthState,
@@ -26,7 +33,10 @@ const AuthContext = createContext(null);
 function usePersistedUserState() {
   const [user, setUser] = useState(null);
   const [authEmail, setAuthEmail] = useState('');
+  const [authBahaiId, setAuthBahaiId] = useState('');
   const [authPassword, setAuthPassword] = useState('');
+  const [authVerificationCode, setAuthVerificationCode] = useState('');
+  const [authResetToken, setAuthResetToken] = useState('');
   const [authError, setAuthError] = useState(null);
   const [isAuthenticating, setIsAuthenticating] = useState(false);
   const [hasHydratedAuth, setHasHydratedAuth] = useState(false);
@@ -75,8 +85,14 @@ function usePersistedUserState() {
     setUser,
     authEmail,
     setAuthEmail,
+    authBahaiId,
+    setAuthBahaiId,
     authPassword,
     setAuthPassword,
+    authVerificationCode,
+    setAuthVerificationCode,
+    authResetToken,
+    setAuthResetToken,
     authError,
     setAuthError,
     isAuthenticating,
@@ -94,8 +110,14 @@ export function AuthProvider({ children }) {
     setUser,
     authEmail,
     setAuthEmail,
+    authBahaiId,
+    setAuthBahaiId,
     authPassword,
     setAuthPassword,
+    authVerificationCode,
+    setAuthVerificationCode,
+    authResetToken,
+    setAuthResetToken,
     authError,
     setAuthError,
     isAuthenticating,
@@ -190,6 +212,188 @@ export function AuthProvider({ children }) {
     });
   }, [setAuthError, setAuthPassword, setAuthMode, setUser]);
 
+  const register = useCallback(async () => {
+    const trimmedBahaiId = authBahaiId.trim();
+    const trimmedEmail = authEmail.trim();
+
+    if (!trimmedBahaiId || !trimmedEmail) {
+      const message = 'Enter both your Bahai ID and email to register.';
+      setAuthError(message);
+      return { success: false, error: message };
+    }
+
+    setAuthBahaiId(trimmedBahaiId);
+    setAuthEmail(trimmedEmail);
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await registerLiquidSpirit({
+        bahaiId: trimmedBahaiId,
+        email: trimmedEmail,
+      });
+      return { success: true, payload: result };
+    } catch (error) {
+      const message = error?.message ?? 'Unable to register. Please try again.';
+      setAuthError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [
+    authBahaiId,
+    authEmail,
+    setAuthBahaiId,
+    setAuthEmail,
+    setAuthError,
+    setIsAuthenticating,
+  ]);
+
+  const verifyRegistration = useCallback(async () => {
+    const trimmedBahaiId = authBahaiId.trim();
+    const trimmedVerificationCode = authVerificationCode.trim();
+    const hasPassword = authPassword.length > 0;
+
+    if (!trimmedBahaiId || !trimmedVerificationCode || !hasPassword) {
+      const message = 'Enter your Bahai ID, verification code, and password.';
+      setAuthError(message);
+      return { success: false, error: message };
+    }
+
+    setAuthBahaiId(trimmedBahaiId);
+    setAuthVerificationCode(trimmedVerificationCode);
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await verifyLiquidSpiritRegistration({
+        bahaiId: trimmedBahaiId,
+        verificationCode: trimmedVerificationCode,
+        password: authPassword,
+      });
+      const normalizedUser = normalizeUserFromPayload(result, authEmail.trim());
+      setUser(normalizedUser);
+      setAuthMode('user');
+      await savePersistedAuthState({
+        mode: 'user',
+        ...normalizedUser,
+        savedAt: Date.now(),
+      });
+      setAuthPassword('');
+      setAuthVerificationCode('');
+      return { success: true, user: normalizedUser, payload: result };
+    } catch (error) {
+      const message = error?.message ?? 'Unable to verify registration.';
+      setAuthError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [
+    authBahaiId,
+    authEmail,
+    authPassword,
+    authVerificationCode,
+    normalizeUserFromPayload,
+    setAuthBahaiId,
+    setAuthError,
+    setAuthMode,
+    setAuthPassword,
+    setAuthVerificationCode,
+    setIsAuthenticating,
+    setUser,
+  ]);
+
+  const requestPasswordReset = useCallback(async () => {
+    const trimmedEmail = authEmail.trim();
+
+    if (!trimmedEmail) {
+      const message = 'Enter your email to reset your password.';
+      setAuthError(message);
+      return { success: false, error: message };
+    }
+
+    setAuthEmail(trimmedEmail);
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await requestLiquidSpiritPasswordReset({
+        email: trimmedEmail,
+      });
+      return { success: true, payload: result };
+    } catch (error) {
+      const message =
+        error?.message ?? 'Unable to request a password reset right now.';
+      setAuthError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [authEmail, setAuthEmail, setAuthError, setIsAuthenticating]);
+
+  const validateResetToken = useCallback(async () => {
+    const trimmedToken = authResetToken.trim();
+
+    if (!trimmedToken) {
+      const message = 'Enter your reset token to continue.';
+      setAuthError(message);
+      return { success: false, error: message };
+    }
+
+    setAuthResetToken(trimmedToken);
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await validateLiquidSpiritResetToken(trimmedToken);
+      return { success: true, payload: result };
+    } catch (error) {
+      const message = error?.message ?? 'Reset token is invalid or expired.';
+      setAuthError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [authResetToken, setAuthError, setAuthResetToken, setIsAuthenticating]);
+
+  const resetPassword = useCallback(async () => {
+    const trimmedToken = authResetToken.trim();
+    const hasPassword = authPassword.length > 0;
+
+    if (!trimmedToken || !hasPassword) {
+      const message = 'Enter your reset token and new password.';
+      setAuthError(message);
+      return { success: false, error: message };
+    }
+
+    setAuthResetToken(trimmedToken);
+    setIsAuthenticating(true);
+    setAuthError(null);
+
+    try {
+      const result = await resetLiquidSpiritPassword({
+        token: trimmedToken,
+        newPassword: authPassword,
+      });
+      setAuthPassword('');
+      return { success: true, payload: result };
+    } catch (error) {
+      const message = error?.message ?? 'Unable to reset your password.';
+      setAuthError(message);
+      return { success: false, error: message };
+    } finally {
+      setIsAuthenticating(false);
+    }
+  }, [
+    authPassword,
+    authResetToken,
+    setAuthError,
+    setAuthPassword,
+    setAuthResetToken,
+    setIsAuthenticating,
+  ]);
+
   const logout = useCallback(async () => {
     setIsAuthenticating(false);
     setUser(null);
@@ -208,8 +412,14 @@ export function AuthProvider({ children }) {
       user,
       authEmail,
       setAuthEmail,
+      authBahaiId,
+      setAuthBahaiId,
       authPassword,
       setAuthPassword,
+      authVerificationCode,
+      setAuthVerificationCode,
+      authResetToken,
+      setAuthResetToken,
       authError,
       setAuthError,
       isAuthenticating,
@@ -217,22 +427,38 @@ export function AuthProvider({ children }) {
       authMode,
       isGuest: authMode === 'guest',
       signIn,
+      register,
+      verifyRegistration,
+      requestPasswordReset,
+      validateResetToken,
+      resetPassword,
       continueAsGuest,
       logout,
     }),
     [
+      authBahaiId,
       authEmail,
       authError,
       authPassword,
+      authResetToken,
+      authVerificationCode,
       authMode,
       continueAsGuest,
       hasHydratedAuth,
       isAuthenticating,
       logout,
+      register,
+      requestPasswordReset,
+      resetPassword,
       setAuthEmail,
+      setAuthBahaiId,
       setAuthError,
       setAuthPassword,
+      setAuthResetToken,
+      setAuthVerificationCode,
       signIn,
+      validateResetToken,
+      verifyRegistration,
       user,
     ],
   );

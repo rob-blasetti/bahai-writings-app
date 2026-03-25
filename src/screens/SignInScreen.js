@@ -18,6 +18,8 @@ export default function SignInScreen({
   onChangeEmail,
   onChangePassword,
   onSignIn,
+  onOpenRegister,
+  onOpenForgotPassword,
   onCancel,
 }) {
   const [isPasswordVisible, setPasswordVisible] = useState(false);
@@ -88,6 +90,12 @@ export default function SignInScreen({
               Log In With Liquid Spirit
             </Text>
           )}
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onOpenForgotPassword} style={styles.authLinkButton}>
+          <Text style={styles.authLinkLabel}>Forgot password?</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={onOpenRegister} style={styles.authLinkButton}>
+          <Text style={styles.authLinkLabel}>Need an account? Register</Text>
         </TouchableOpacity>
       </View>
     </BaseScreen>

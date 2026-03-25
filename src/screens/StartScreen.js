@@ -6,6 +6,7 @@ export default function StartScreen({
   styles,
   displayName,
   onStartSignIn,
+  onStartRegister,
   onContinueAsGuest,
 }) {
   return (
@@ -32,12 +33,16 @@ export default function StartScreen({
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
-          onPress={onContinueAsGuest}
+          onPress={onStartRegister}
           style={styles.authSecondaryButton}
         >
-          <Text style={styles.authSecondaryButtonLabel}>
-            Continue as Guest
-          </Text>
+          <Text style={styles.authSecondaryButtonLabel}>Register</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={onContinueAsGuest}
+          style={styles.authLinkButton}
+        >
+          <Text style={styles.authLinkLabel}>Continue as Guest</Text>
         </TouchableOpacity>
       </View>
     </BaseScreen>
